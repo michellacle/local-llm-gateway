@@ -155,6 +155,89 @@ Remove installed files only if you no longer need the local config:
 sudo rm -rf /opt/local-llm-gateway /etc/local-llm-gateway /etc/default/local-llm-gateway
 ```
 
+## Install As A macOS LaunchDaemon
+
+On macOS, Local LLM Gateway can run as an always-on `launchd` service. The macOS installer installs from a source checkout, creates an isolated virtual environment, writes a LaunchDaemon plist, loads it into the system launch domain, and confirms `/health` before reporting success.
+
+Requirements:
+
+- macOS with `launchctl`
+- `python3` available on `PATH`
+- `sudo` access
+
+Install from a source checkout:
+
+```bash
+git clone https://github.com/michellacle/local-llm-gateway.git
+cd local-llm-gateway
+sudo ./scripts/install-macos-launchd.sh --config ./config.json --port 8090
+```
+
+Equivalent explicit form:
+
+```bash
+sudo ./scripts/install-macos-launchd.sh --from-source . --config ./config.json --port 8090
+```
+
+The installer creates:
+
+```text
+/usr/local/local-llm-gateway/venv
+/etc/local-llm-gateway/config.json
+/Library/LaunchDaemons/com.local-llm-gateway.plist
+/var/log/local-llm-gateway.out.log
+/var/log/local-llm-gateway.err.log
+```
+
+Re-running the installer is the update path. It unloads the existing LaunchDaemon, force-reinstalls the local checkout into `/usr/local/local-llm-gateway/venv`, reloads the LaunchDaemon, runs the health check, and prints `Update successful` when the daemon is running.
+
+Check status:
+
+```bash
+sudo launchctl print system/com.local-llm-gateway
+```
+
+Follow logs:
+
+```bash
+tail -f /var/log/local-llm-gateway.out.log /var/log/local-llm-gateway.err.log
+```
+
+Restart after changing config:
+
+```bash
+sudo launchctl kickstart -k system/com.local-llm-gateway
+```
+
+Verify the service:
+
+```bash
+curl http://127.0.0.1:8090/health
+curl http://127.0.0.1:8090/v1/models
+```
+
+Update from a source checkout:
+
+```bash
+cd /path/to/local-llm-gateway
+git pull
+sudo ./scripts/install-macos-launchd.sh --from-source . --config ./config.json --port 8090
+```
+
+Disable or remove the LaunchDaemon:
+
+```bash
+sudo launchctl bootout system /Library/LaunchDaemons/com.local-llm-gateway.plist
+sudo rm -f /Library/LaunchDaemons/com.local-llm-gateway.plist
+```
+
+Remove installed files only if you no longer need the local config:
+
+```bash
+sudo rm -rf /usr/local/local-llm-gateway /etc/local-llm-gateway
+sudo rm -f /var/log/local-llm-gateway.out.log /var/log/local-llm-gateway.err.log
+```
+
 ## Configuration
 
 Create `config.json`:
