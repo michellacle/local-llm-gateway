@@ -11,17 +11,17 @@ Local LLM research setups often have several inference servers running on differ
 Example backend servers:
 
 ```text
-minadioro:11434
-gpus:8000
+host1:11434
+host2:8000
 ```
 
-If `minadioro` exposes `qwen3.6:26b`, LLM Mux exposes it as:
+If `host1` exposes `qwen3.6:26b`, LLM Mux exposes it as:
 
 ```text
-minadioro-qwen3.6:26b
+host1-qwen3.6:26b
 ```
 
-When a request uses `minadioro-qwen3.6:26b`, LLM Mux forwards it to `minadioro` with the model rewritten back to `qwen3.6:26b`.
+When a request uses `host1-qwen3.6:26b`, LLM Mux forwards it to `host1` with the model rewritten back to `qwen3.6:26b`.
 
 ## Features
 
@@ -88,12 +88,12 @@ Create `config.json`:
 {
   "upstreams": [
     {
-      "name": "minadioro",
-      "host": "minadioro:11434"
+      "name": "host1",
+      "host": "host1:11434"
     },
     {
-      "name": "gpus",
-      "host": "gpus:8000"
+      "name": "host2",
+      "host": "host2:8000"
     }
   ]
 }
@@ -163,16 +163,16 @@ Example response:
   "object": "list",
   "data": [
     {
-      "id": "minadioro-qwen3.6:26b",
+      "id": "host1-qwen3.6:26b",
       "object": "model",
       "created": 0,
-      "owned_by": "minadioro"
+      "owned_by": "host1"
     },
     {
-      "id": "gpus-llama3.1:70b",
+      "id": "host2-llama3.1:70b",
       "object": "model",
       "created": 0,
-      "owned_by": "gpus"
+      "owned_by": "host2"
     }
   ]
 }
@@ -184,7 +184,7 @@ Chat completion:
 curl http://localhost:8080/v1/chat/completions \
   -H 'Content-Type: application/json' \
   -d '{
-    "model": "minadioro-qwen3.6:26b",
+    "model": "host1-qwen3.6:26b",
     "messages": [{"role": "user", "content": "Say hello"}]
   }'
 ```
@@ -195,7 +195,7 @@ Streaming chat completion:
 curl -N http://localhost:8080/v1/chat/completions \
   -H 'Content-Type: application/json' \
   -d '{
-    "model": "gpus-llama3.1:70b",
+    "model": "host2-llama3.1:70b",
     "stream": true,
     "messages": [{"role": "user", "content": "Write one sentence."}]
   }'

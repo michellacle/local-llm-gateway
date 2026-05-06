@@ -44,10 +44,6 @@ class AppConfig:
             base_url = build_base_url(item)
             if not name:
                 raise ValueError("Each upstream must define a non-empty 'name'")
-            if "-" in name:
-                raise ValueError(
-                    f"Upstream name '{name}' cannot contain '-' because model IDs use '<upstream>-<model>'"
-                )
             if name in seen_names:
                 raise ValueError(f"Duplicate upstream name '{name}'")
 

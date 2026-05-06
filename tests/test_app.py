@@ -79,3 +79,38 @@ def test_proxy_strips_upstream_prefix(monkeypatch):
             "messages": [{"role": "user", "content": "hello"}],
         },
     }
+
+
+def test_proxy_matches_hyphenated_upstream_name(monkeypatch):
+    captured = {}
+
+    async def fake_post(self, url, **kwargs):
+        captured["url"] = url
+        captured["json"] = kwargs["json"]
+        return httpx.Response(200, json={"id": "chatcmpl-test"})
+
+    monkeypatch.setattr(httpx.AsyncClient, "post", fake_post)
+    app = create_app(
+        AppConfig(
+            upstreams=(
+                Upstream(name="minadioro-ollama", base_url="http://minadioro:11434/v1"),
+            )
+        )
+    )
+
+    api_response = TestClient(app).post(
+        "/v1/chat/completions",
+        json={
+            "model": "minadioro-ollama-qwen3.6:35b",
+            "messages": [{"role": "user", "content": "hello"}],
+        },
+    )
+
+    assert api_response.status_code == 200
+    assert captured == {
+        "url": "http://minadioro:11434/v1/chat/completions",
+        "json": {
+            "model": "qwen3.6:35b",
+            "messages": [{"role": "user", "content": "hello"}],
+        },
+    }
