@@ -35,7 +35,7 @@ OPENAI_ENDPOINTS = {
 def create_app(config: AppConfig | None = None) -> FastAPI:
     app_config = config or load_config()
     registry = UpstreamRegistry(app_config.upstreams)
-    app = FastAPI(title="LLM Mux", version="0.1.0")
+    app = FastAPI(title="Local LLM Gateway", version="0.1.0")
     app.state.registry = registry
     app.state.upstreams = app_config.upstreams
 
@@ -214,8 +214,8 @@ def upstream_unavailable(exc: httpx.RequestError, upstream: Upstream) -> JSONRes
 
 
 def main() -> None:
-    host = os.getenv("LLM_MUX_HOST", "0.0.0.0")
-    port = int(os.getenv("LLM_MUX_PORT", "8080"))
+    host = os.getenv("LOCAL_LLM_GATEWAY_HOST", os.getenv("LLM_MUX_HOST", "0.0.0.0"))
+    port = int(os.getenv("LOCAL_LLM_GATEWAY_PORT", os.getenv("LLM_MUX_PORT", "8080")))
     uvicorn.run(create_app(), host=host, port=port)
 
 

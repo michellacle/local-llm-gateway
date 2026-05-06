@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 
-from llm_mux.config import AppConfig
+from local_llm_gateway.config import AppConfig
 
 
 def test_config_accepts_host_port_entries(tmp_path):

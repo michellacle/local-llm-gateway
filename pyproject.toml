@@ -1,12 +1,12 @@
 [project]
-name = "llm-mux"
+name = "local-llm-gateway"
 version = "0.1.0"
 description = "OpenAI-compatible LLM API multiplexer for local-network model servers"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { file = "LICENSE" }
 authors = [
-    { name = "LLM Mux Contributors" }
+    { name = "Local LLM Gateway Contributors" }
 ]
 keywords = ["llm", "openai", "fastapi", "proxy", "multiplexer", "local-llm", "ollama"]
 classifiers = [
@@ -37,19 +37,19 @@ dev = [
 ]
 
 [project.scripts]
-llm-mux = "llm_mux.cli:main"
+local-llm-gateway = "local_llm_gateway.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/your-org/llm-mux"
-Repository = "https://github.com/your-org/llm-mux"
-Issues = "https://github.com/your-org/llm-mux/issues"
+Homepage = "https://github.com/michellacle/local-llm-gateway"
+Repository = "https://github.com/michellacle/local-llm-gateway"
+Issues = "https://github.com/michellacle/local-llm-gateway/issues"
 
 [tool.hatch.build.targets.wheel]
-packages = ["llm_mux"]
+packages = ["local_llm_gateway"]
 
 [tool.hatch.build.targets.sdist]
 include = [
-    "/llm_mux",
+    "/local_llm_gateway",
     "/tests",
     "/README.md",
     "/LICENSE",

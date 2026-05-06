@@ -85,5 +85,7 @@ def normalize_base_url(value: str) -> str:
 
 
 def load_config(path: str | os.PathLike[str] | None = None) -> AppConfig:
-    config_path = path or os.getenv("LLM_MUX_CONFIG", "config.json")
+    config_path = path or os.getenv(
+        "LOCAL_LLM_GATEWAY_CONFIG", os.getenv("LLM_MUX_CONFIG", "config.json")
+    )
     return AppConfig.from_file(config_path)

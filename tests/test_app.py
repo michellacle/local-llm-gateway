@@ -3,8 +3,8 @@ from __future__ import annotations
 import httpx
 from fastapi.testclient import TestClient
 
-from llm_mux.app import create_app
-from llm_mux.config import AppConfig, Upstream
+from local_llm_gateway.app import create_app
+from local_llm_gateway.config import AppConfig, Upstream
 
 
 def response(status_code: int, url: str, json: dict) -> httpx.Response:

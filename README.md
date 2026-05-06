@@ -1,12 +1,12 @@
-# LLM Mux
+# Local LLM Gateway
 
-LLM Mux is a FastAPI OpenAI-compatible API server that exposes one stable endpoint for multiple local-network OpenAI-compatible LLM servers.
+Local LLM Gateway is a FastAPI OpenAI-compatible API server that exposes one stable endpoint for multiple local-network OpenAI-compatible LLM servers.
 
 It discovers models from each configured backend and publishes them through `/v1/models` with a backend prefix. A client can use one base URL and switch models by changing only the model name.
 
 ## Why
 
-Local LLM research setups often have several inference servers running on different machines, ports, GPUs, runtimes, and model configurations. LLM Mux gives upstream tools one OpenAI-compatible endpoint while preserving access to every backend model.
+Local LLM research setups often have several inference servers running on different machines, ports, GPUs, runtimes, and model configurations. Local LLM Gateway gives upstream tools one OpenAI-compatible endpoint while preserving access to every backend model.
 
 Example backend servers:
 
@@ -15,13 +15,13 @@ host1:11434
 host2:8000
 ```
 
-If `host1` exposes `qwen3.6:26b`, LLM Mux exposes it as:
+If `host1` exposes `qwen3.6:26b`, Local LLM Gateway exposes it as:
 
 ```text
 host1-qwen3.6:26b
 ```
 
-When a request uses `host1-qwen3.6:26b`, LLM Mux forwards it to `host1` with the model rewritten back to `qwen3.6:26b`.
+When a request uses `host1-qwen3.6:26b`, Local LLM Gateway forwards it to `host1` with the model rewritten back to `qwen3.6:26b`.
 
 ## Features
 
@@ -30,7 +30,7 @@ When a request uses `host1-qwen3.6:26b`, LLM Mux forwards it to `host1` with the
 - Dynamic model names based on configured upstream host prefixes.
 - Supports streaming chat/completion responses.
 - Configurable upstream API keys and request timeouts.
-- Installable as a regular Python package with the `llm-mux` CLI.
+- Installable as a regular Python package with the `local-llm-gateway` CLI.
 
 ## Install From PyPI
 
@@ -40,13 +40,13 @@ After the package is published:
 python3 -m venv .venv
 . .venv/bin/activate
 python -m pip install --upgrade pip
-python -m pip install llm-mux
+python -m pip install local-llm-gateway
 ```
 
 Run it:
 
 ```bash
-llm-mux --config config.json --host 0.0.0.0 --port 8080
+local-llm-gateway --config config.json --host 0.0.0.0 --port 8080
 ```
 
 ## Install From Source
@@ -54,8 +54,8 @@ llm-mux --config config.json --host 0.0.0.0 --port 8080
 For development or before the package is published:
 
 ```bash
-git clone https://github.com/your-org/llm-mux.git
-cd llm-mux
+git clone https://github.com/michellacle/local-llm-gateway.git
+cd local-llm-gateway
 python3 -m venv .venv
 . .venv/bin/activate
 python -m pip install --upgrade pip
@@ -71,13 +71,13 @@ Run tests:
 Run the server:
 
 ```bash
-.venv/bin/llm-mux --config config.json --host 0.0.0.0 --port 8080
+.venv/bin/local-llm-gateway --config config.json --host 0.0.0.0 --port 8080
 ```
 
 You can also run it as a module:
 
 ```bash
-.venv/bin/python -m llm_mux --config config.json
+.venv/bin/python -m local_llm_gateway --config config.json
 ```
 
 ## Configuration
@@ -131,15 +131,15 @@ Rules:
 Environment variables:
 
 ```bash
-export LLM_MUX_CONFIG=/path/to/config.json
-export LLM_MUX_HOST=0.0.0.0
-export LLM_MUX_PORT=8080
+export LOCAL_LLM_GATEWAY_CONFIG=/path/to/config.json
+export LOCAL_LLM_GATEWAY_HOST=0.0.0.0
+export LOCAL_LLM_GATEWAY_PORT=8080
 ```
 
 CLI arguments override the defaults:
 
 ```bash
-llm-mux --config /path/to/config.json --host 127.0.0.1 --port 8080
+local-llm-gateway --config /path/to/config.json --host 127.0.0.1 --port 8080
 ```
 
 ## API
@@ -224,8 +224,8 @@ python -m twine check dist/*
 This creates:
 
 ```text
-dist/llm_mux-<version>.tar.gz
-dist/llm_mux-<version>-py3-none-any.whl
+dist/local_llm_gateway-<version>.tar.gz
+dist/local_llm_gateway-<version>-py3-none-any.whl
 ```
 
 ## Publish To PyPI
@@ -247,14 +247,14 @@ python -m twine upload --repository testpypi dist/*
 Install from TestPyPI for verification:
 
 ```bash
-python3 -m venv /tmp/llm-mux-test
-. /tmp/llm-mux-test/bin/activate
-python -m pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ llm-mux
-llm-mux --help
+python3 -m venv /tmp/local-llm-gateway-test
+. /tmp/local-llm-gateway-test/bin/activate
+python -m pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ local-llm-gateway
+local-llm-gateway --help
 ```
 
 ## Development Notes
 
 The repository intentionally keeps `config.json` out of source control because it is machine-specific. Use `config.example.json` as the template.
 
-The package is currently alpha-quality. Before a public PyPI release, update the project URLs in `pyproject.toml` from `your-org` to the real repository location.
+The package is currently alpha-quality. Review the version, classifiers, and release notes before a public PyPI release.
