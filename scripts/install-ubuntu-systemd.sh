@@ -175,11 +175,13 @@ fi
 install -d -m 0755 "$INSTALL_DIR"
 install -d -m 0755 "$CONFIG_DIR"
 
-if [[ ! -f "$CONFIG_FILE" ]]; then
-  if [[ -n "$CONFIG_SOURCE" ]]; then
-    install -m 0640 -o root -g "$SERVICE_USER" "$CONFIG_SOURCE" "$CONFIG_FILE"
-  else
-    cat > "$CONFIG_FILE" <<'JSON'
+if [[ -n "$CONFIG_SOURCE" ]]; then
+  if [[ -f "$CONFIG_FILE" ]]; then
+    log "Replacing existing config with --config source: $CONFIG_FILE"
+  fi
+  install -m 0640 -o root -g "$SERVICE_USER" "$CONFIG_SOURCE" "$CONFIG_FILE"
+elif [[ ! -f "$CONFIG_FILE" ]]; then
+  cat > "$CONFIG_FILE" <<'JSON'
 {
   "upstreams": [
     {
@@ -193,9 +195,8 @@ if [[ ! -f "$CONFIG_FILE" ]]; then
   ]
 }
 JSON
-    chown root:"$SERVICE_USER" "$CONFIG_FILE"
-    chmod 0640 "$CONFIG_FILE"
-  fi
+  chown root:"$SERVICE_USER" "$CONFIG_FILE"
+  chmod 0640 "$CONFIG_FILE"
 else
   log "Keeping existing config: $CONFIG_FILE"
 fi

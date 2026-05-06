@@ -155,11 +155,13 @@ log "Creating install and config directories"
 install -d -m 0755 "$INSTALL_DIR"
 install -d -m 0755 "$CONFIG_DIR"
 
-if [[ ! -f "$CONFIG_FILE" ]]; then
-  if [[ -n "$CONFIG_SOURCE" ]]; then
-    install -m 0644 "$CONFIG_SOURCE" "$CONFIG_FILE"
-  else
-    cat > "$CONFIG_FILE" <<'JSON'
+if [[ -n "$CONFIG_SOURCE" ]]; then
+  if [[ -f "$CONFIG_FILE" ]]; then
+    log "Replacing existing config with --config source: $CONFIG_FILE"
+  fi
+  install -m 0644 "$CONFIG_SOURCE" "$CONFIG_FILE"
+elif [[ ! -f "$CONFIG_FILE" ]]; then
+  cat > "$CONFIG_FILE" <<'JSON'
 {
   "upstreams": [
     {
@@ -173,8 +175,7 @@ if [[ ! -f "$CONFIG_FILE" ]]; then
   ]
 }
 JSON
-    chmod 0644 "$CONFIG_FILE"
-  fi
+  chmod 0644 "$CONFIG_FILE"
 else
   log "Keeping existing config: $CONFIG_FILE"
 fi

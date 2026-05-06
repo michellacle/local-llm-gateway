@@ -71,7 +71,7 @@ For a research workstation or lab server, Local LLM Gateway should normally run 
 
 At the end of installation, the installer starts the service, waits for `/health` to return `{"status":"ok"}`, and prints a confirmation that the gateway is running. If the service starts but the health check fails, the installer prints recent `systemd` logs and exits with an error.
 
-The installer is also the update path. Re-running it from a newer source checkout stops the existing service, force-reinstalls the local package into `/opt/local-llm-gateway/venv`, rewrites the `systemd` unit, restarts the service, runs the health check, and prints `Update successful` when the daemon is running.
+The installer is also the update path. Re-running it from a newer source checkout stops the existing service, force-reinstalls the local package into `/opt/local-llm-gateway/venv`, rewrites the `systemd` unit, restarts the service, runs the health check, and prints `Update successful` when the daemon is running. If `--config PATH` is provided during an update, the service config is replaced from that path; without `--config`, the existing service config is preserved.
 
 Install from a source checkout:
 
