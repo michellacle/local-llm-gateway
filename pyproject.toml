@@ -33,7 +33,6 @@ dev = [
     "build>=1.2.0",
     "pytest>=8.0.0",
     "pytest-asyncio>=0.23.0",
-    "twine>=5.0.0",
 ]
 
 [project.scripts]
@@ -54,6 +53,7 @@ include = [
     "/README.md",
     "/LICENSE",
     "/config.example.json",
+    "/scripts",
     "/pyproject.toml",
 ]
 

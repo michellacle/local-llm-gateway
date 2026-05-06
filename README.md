@@ -32,26 +32,11 @@ When a request uses `host1-qwen3.6:26b`, Local LLM Gateway forwards it to `host1
 - Configurable upstream API keys and request timeouts.
 - Installable as a regular Python package with the `local-llm-gateway` CLI.
 
-## Install From PyPI
+## Install Manually
 
-After the package is published:
+Local LLM Gateway is intended to be installed from a source checkout by a human operator or an AI agent. It is not distributed through PyPI.
 
-```bash
-python3 -m venv .venv
-. .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install local-llm-gateway
-```
-
-Run it:
-
-```bash
-local-llm-gateway --config config.json --host 0.0.0.0 --port 8080
-```
-
-## Install From Source
-
-For development or before the package is published:
+For a foreground development install:
 
 ```bash
 git clone https://github.com/michellacle/local-llm-gateway.git
@@ -68,16 +53,106 @@ Run tests:
 .venv/bin/python -m pytest -q
 ```
 
-Run the server:
+Run the server manually:
 
 ```bash
-.venv/bin/local-llm-gateway --config config.json --host 0.0.0.0 --port 8080
+.venv/bin/local-llm-gateway --config config.json --host 0.0.0.0 --port 8090
 ```
 
 You can also run it as a module:
 
 ```bash
 .venv/bin/python -m local_llm_gateway --config config.json
+```
+
+## Install As An Ubuntu Daemon
+
+For a research workstation or lab server, Local LLM Gateway should normally run as an always-on service. The Ubuntu installer creates an isolated virtual environment, writes a `systemd` unit, enables startup on boot, and configures automatic restart on failure.
+
+At the end of installation, the installer starts the service, waits for `/health` to return `{"status":"ok"}`, and prints a confirmation that the gateway is running. If the service starts but the health check fails, the installer prints recent `systemd` logs and exits with an error.
+
+The installer is also the update path. Re-running it from a newer source checkout stops the existing service, force-reinstalls the local package into `/opt/local-llm-gateway/venv`, rewrites the `systemd` unit, restarts the service, runs the health check, and prints `Update successful` when the daemon is running.
+
+Install from a source checkout:
+
+```bash
+git clone https://github.com/michellacle/local-llm-gateway.git
+cd local-llm-gateway
+sudo ./scripts/install-ubuntu-systemd.sh --config ./config.json --port 8090
+```
+
+Equivalent explicit form:
+
+```bash
+sudo ./scripts/install-ubuntu-systemd.sh --from-source . --config ./config.json --port 8090
+```
+
+The installer creates:
+
+```text
+/opt/local-llm-gateway/venv
+/etc/local-llm-gateway/config.json
+/etc/default/local-llm-gateway
+/etc/systemd/system/local-llm-gateway.service
+```
+
+The service runs as the dedicated system user:
+
+```text
+local-llm-gateway
+```
+
+Check status:
+
+```bash
+systemctl status local-llm-gateway --no-pager
+```
+
+Follow logs:
+
+```bash
+journalctl -u local-llm-gateway -f
+```
+
+Restart after changing config:
+
+```bash
+sudo systemctl restart local-llm-gateway
+```
+
+Verify the service:
+
+```bash
+curl http://127.0.0.1:8090/health
+curl http://127.0.0.1:8090/v1/models
+```
+
+If a Docker container such as Open WebUI needs to reach the host service on the default Docker bridge, use:
+
+```text
+http://172.17.0.1:8090/v1
+```
+
+Update an existing daemon install from a source checkout:
+
+```bash
+cd /path/to/local-llm-gateway
+git pull
+sudo ./scripts/install-ubuntu-systemd.sh --from-source . --config ./config.json --port 8090
+```
+
+Disable or remove the service:
+
+```bash
+sudo systemctl disable --now local-llm-gateway
+sudo rm -f /etc/systemd/system/local-llm-gateway.service
+sudo systemctl daemon-reload
+```
+
+Remove installed files only if you no longer need the local config:
+
+```bash
+sudo rm -rf /opt/local-llm-gateway /etc/local-llm-gateway /etc/default/local-llm-gateway
 ```
 
 ## Configuration
@@ -124,7 +199,7 @@ Rules:
 
 - `name` becomes the public model prefix.
 - `name` must be unique.
-- `name` cannot contain `-` because public model IDs use `<upstream-name>-<upstream-model-id>`.
+- `name` can contain hyphens; the gateway matches the longest configured upstream prefix.
 - `host` is enough for most local servers.
 - `base_url` is useful for HTTPS, reverse proxies, or non-standard paths.
 
@@ -207,7 +282,9 @@ Supported proxy endpoints:
 - `POST /v1/completions`
 - `POST /v1/embeddings`
 
-## Build The Package
+## Build Local Artifacts
+
+You do not need to build artifacts for normal daemon installation; the installer can install directly from a source checkout. Build artifacts are useful for offline transfer, audits, or controlled internal releases.
 
 Use the project virtual environment:
 
@@ -218,38 +295,21 @@ python -m pip install --upgrade pip
 python -m pip install -e '.[dev]'
 python -m pytest -q
 python -m build
-python -m twine check dist/*
 ```
 
-This creates:
+This creates local distribution files:
 
 ```text
 dist/local_llm_gateway-<version>.tar.gz
 dist/local_llm_gateway-<version>-py3-none-any.whl
 ```
 
-## Publish To PyPI
-
-Create a PyPI API token, then upload:
-
-```bash
-. .venv/bin/activate
-python -m twine upload dist/*
-```
-
-For TestPyPI first:
-
-```bash
-. .venv/bin/activate
-python -m twine upload --repository testpypi dist/*
-```
-
-Install from TestPyPI for verification:
+Install a local wheel manually if needed:
 
 ```bash
 python3 -m venv /tmp/local-llm-gateway-test
 . /tmp/local-llm-gateway-test/bin/activate
-python -m pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ local-llm-gateway
+python -m pip install ./dist/local_llm_gateway-<version>-py3-none-any.whl
 local-llm-gateway --help
 ```
 
@@ -257,4 +317,4 @@ local-llm-gateway --help
 
 The repository intentionally keeps `config.json` out of source control because it is machine-specific. Use `config.example.json` as the template.
 
-The package is currently alpha-quality. Review the version, classifiers, and release notes before a public PyPI release.
+The package is currently alpha-quality. Review the version, service behavior, and release notes before deploying it as critical local research infrastructure.
