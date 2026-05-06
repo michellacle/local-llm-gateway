@@ -1,0 +1,66 @@
+[project]
+name = "llm-mux"
+version = "0.1.0"
+description = "OpenAI-compatible LLM API multiplexer for local-network model servers"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { file = "LICENSE" }
+authors = [
+    { name = "LLM Mux Contributors" }
+]
+keywords = ["llm", "openai", "fastapi", "proxy", "multiplexer", "local-llm", "ollama"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Framework :: FastAPI",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Internet :: Proxy Servers",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+    "fastapi>=0.111.0",
+    "httpx>=0.27.0",
+    "uvicorn[standard]>=0.30.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "build>=1.2.0",
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "twine>=5.0.0",
+]
+
+[project.scripts]
+llm-mux = "llm_mux.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/your-org/llm-mux"
+Repository = "https://github.com/your-org/llm-mux"
+Issues = "https://github.com/your-org/llm-mux/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["llm_mux"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/llm_mux",
+    "/tests",
+    "/README.md",
+    "/LICENSE",
+    "/config.example.json",
+    "/pyproject.toml",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

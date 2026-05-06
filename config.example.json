@@ -1,0 +1,12 @@
+{
+  "upstreams": [
+    {
+      "name": "minadioro",
+      "host": "minadioro:11434"
+    },
+    {
+      "name": "gpus",
+      "host": "gpus:8000"
+    }
+  ]
+}
