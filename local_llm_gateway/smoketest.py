@@ -323,10 +323,11 @@ class SmokeTestRunner:
                     content = obj.get("choices", [{}])[0].get("delta", {}).get("content", "")
                     if content:
                         collected.append(content)
-                    usage_node = obj.get("usage")
-                    if usage_node:
-                        stream_input_tokens = usage_node.get("prompt_tokens")
-                        stream_output_tokens = usage_node.get("completion_tokens")
+                    in_t, out_t = self._extract_tokens(obj)
+                    if in_t is not None:
+                        stream_input_tokens = in_t
+                    if out_t is not None:
+                        stream_output_tokens = out_t
                 except (json.JSONDecodeError, IndexError, KeyError):
                     pass
         await resp.aclose()

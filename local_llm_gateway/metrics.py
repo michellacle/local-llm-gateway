@@ -195,6 +195,14 @@ async def streaming_proxy_with_metrics(
 
     response_headers = _filter_response_headers(response.headers)
 
+    def extract_tokens(obj: dict[str, Any]) -> tuple[int | None, int | None]:
+        usage_node = obj.get("usage")
+        if usage_node:
+            return usage_node.get("prompt_tokens"), usage_node.get("completion_tokens")
+        if obj.get("prompt_eval_count") is not None:
+            return obj.get("prompt_eval_count"), obj.get("eval_count")
+        return None, None
+
     async def body() -> AsyncIterator[bytes]:
         nonlocal first_chunk_time, total_bytes, metric
         sse_buffer = ""
@@ -215,10 +223,11 @@ async def streaming_proxy_with_metrics(
                         continue
                     try:
                         obj = json.loads(data)
-                        usage_node = obj.get("usage")
-                        if usage_node:
-                            metric.input_tokens = usage_node.get("prompt_tokens")
-                            metric.output_tokens = usage_node.get("completion_tokens")
+                        in_t, out_t = extract_tokens(obj)
+                        if in_t is not None:
+                            metric.input_tokens = in_t
+                        if out_t is not None:
+                            metric.output_tokens = out_t
                     except (json.JSONDecodeError, KeyError):
                         pass
                 yield chunk
@@ -233,10 +242,11 @@ async def streaming_proxy_with_metrics(
                     continue
                 try:
                     obj = json.loads(data)
-                    usage_node = obj.get("usage")
-                    if usage_node:
-                        metric.input_tokens = usage_node.get("prompt_tokens")
-                        metric.output_tokens = usage_node.get("completion_tokens")
+                    in_t, out_t = extract_tokens(obj)
+                    if in_t is not None:
+                        metric.input_tokens = in_t
+                    if out_t is not None:
+                        metric.output_tokens = out_t
                 except (json.JSONDecodeError, KeyError):
                     pass
             elapsed = time.time() - start_time
