@@ -101,7 +101,7 @@ function renderBucketChart(buckets) {
   const chartW = W - padding.left - padding.right;
   const chartH = H - padding.top - padding.bottom;
 
-  const last24 = buckets.slice(-24);
+  const last24 = buckets;
 
   ctx.fillStyle = "#8b949e";
   ctx.font = "10px monospace";

@@ -124,6 +124,10 @@ class MetricsStore:
 
 
 def _empty_aggregate(start_time: float = time.time()) -> dict[str, Any]:
+    buckets = [
+        {"time": round((k * 3600) + start_time, 3), "tokens": 0}
+        for k in range(24)
+    ]
     return {
         "overall": {
             "count": 0,
@@ -136,7 +140,7 @@ def _empty_aggregate(start_time: float = time.time()) -> dict[str, Any]:
         "per_model": {},
         "total_records": 0,
         "tokens_per_hour": 0,
-        "buckets": [],
+        "buckets": buckets,
     }
 
 
@@ -157,10 +161,11 @@ def _compute_throughput(
         bucket_key = int((ts - start_time) // bucket_size)
         buckets[bucket_key] = buckets.get(bucket_key, 0) + (r.output_tokens or 0)
 
-    sorted_keys = sorted(buckets.keys())
+    current_bucket = int((now - start_time) // bucket_size)
+    min_bucket = max(0, current_bucket - 23)
     result = [
-        {"time": round((k * bucket_size) + start_time, 3), "tokens": buckets[k]}
-        for k in sorted_keys
+        {"time": round((k * bucket_size) + start_time, 3), "tokens": buckets.get(k, 0)}
+        for k in range(min_bucket, current_bucket + 1)
     ]
 
     return tokens_per_hour, result
