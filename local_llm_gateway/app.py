@@ -14,7 +14,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response, StreamingRes
 from .config import AppConfig, MetricsConfig, Upstream, load_config
 from .metrics import MetricsStore, RequestMetric, streaming_proxy_with_metrics
 from .router import UnknownModelError, UpstreamRegistry
-from .smoketest import SmokeTestRunner
+from .smoketest import BenchmarkRunner, SmokeTestRunner
 
 HOP_BY_HOP_HEADERS = {
     "connection",
@@ -53,6 +53,9 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
 
     smoke_runner = SmokeTestRunner(app_config)
     app.state.smoke_runner = smoke_runner
+
+    benchmark_runner = BenchmarkRunner(app_config)
+    app.state.benchmark_runner = benchmark_runner
 
     @app.get("/health")
     async def health() -> dict[str, Any]:
@@ -144,6 +147,49 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
             run = await smoke_runner.get_latest_run()
         if run is None:
             return {"error": "No smoke test run found"}
+        return run.summary
+
+    @app.get("/benchmark.js")
+    async def benchmark_js() -> FileResponse:
+        js_path = static_dir / "benchmark.js"
+        if js_path.exists():
+            return FileResponse(str(js_path), media_type="application/javascript")
+        return Response(content=";", media_type="application/javascript")
+
+    @app.get("/benchmark")
+    async def benchmark_page() -> FileResponse:
+        html_path = static_dir / "benchmark.html"
+        if html_path.exists():
+            return FileResponse(str(html_path), media_type="text/html")
+        return Response(
+            content="<html><body><h1>Benchmark</h1><p>Not available</p></body></html>",
+            media_type="text/html",
+        )
+
+    @app.post("/benchmark/run")
+    async def run_benchmark(request: Request) -> dict[str, Any]:
+        payload = await request.json()
+        gateway_url = f"{request.url.scheme}://{request.url.netloc}"
+        benchmark_runner.set_gateway_url(gateway_url)
+        run_id = await benchmark_runner.start_run(
+            model=payload.get("model", ""),
+            prompt=payload.get("prompt", "Say hello in one word."),
+            iterations=payload.get("iterations", 5),
+            stream=bool(payload.get("stream", False)),
+            max_tokens=payload.get("max_tokens", 256),
+        )
+        return {"run_id": run_id}
+
+    @app.get("/benchmark/status")
+    async def benchmark_status(
+        run_id: str | None = None,
+    ) -> dict[str, Any]:
+        if run_id:
+            run = await benchmark_runner.get_run(run_id)
+        else:
+            run = await benchmark_runner.get_latest_run()
+        if run is None:
+            return {"error": "No benchmark run found"}
         return run.summary
 
     @app.post("/v1/chat/completions", response_model=None)

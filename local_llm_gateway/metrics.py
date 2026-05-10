@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import time
 import uuid
 from collections import deque
@@ -196,6 +197,7 @@ async def streaming_proxy_with_metrics(
 
     async def body() -> AsyncIterator[bytes]:
         nonlocal first_chunk_time, total_bytes, metric
+        sse_buffer = ""
         try:
             async for chunk in response.aiter_bytes():
                 if first_chunk_time is None:
@@ -203,8 +205,40 @@ async def streaming_proxy_with_metrics(
                     metric.ttft_ms = round((first_chunk_time - start_time) * 1000, 2)
                     ready.set()
                 total_bytes += len(chunk)
+                sse_buffer += chunk.decode("utf-8", errors="replace")
+                while "\n" in sse_buffer:
+                    line, sse_buffer = sse_buffer.split("\n", 1)
+                    if not line.startswith("data: "):
+                        continue
+                    data = line[6:]
+                    if data == "[DONE]":
+                        continue
+                    try:
+                        obj = json.loads(data)
+                        usage_node = obj.get("usage")
+                        if usage_node:
+                            metric.input_tokens = usage_node.get("prompt_tokens")
+                            metric.output_tokens = usage_node.get("completion_tokens")
+                    except (json.JSONDecodeError, KeyError):
+                        pass
                 yield chunk
         finally:
+            remaining = sse_buffer
+            while "\n" in remaining:
+                line, remaining = remaining.split("\n", 1)
+                if not line.startswith("data: "):
+                    continue
+                data = line[6:]
+                if data == "[DONE]":
+                    continue
+                try:
+                    obj = json.loads(data)
+                    usage_node = obj.get("usage")
+                    if usage_node:
+                        metric.input_tokens = usage_node.get("prompt_tokens")
+                        metric.output_tokens = usage_node.get("completion_tokens")
+                except (json.JSONDecodeError, KeyError):
+                    pass
             elapsed = time.time() - start_time
             metric.total_time_ms = round(elapsed * 1000, 2)
             metric.bytes_sent = total_bytes

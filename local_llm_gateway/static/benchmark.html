@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Smoke Test — Local LLM Gateway</title>
+  <title>Benchmark — Local LLM Gateway</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -22,7 +22,7 @@
     button:hover { background: #2ea043; }
     button:disabled { background: #484f58; cursor: not-allowed; }
     label { font-size: .85rem; color: #8b949e; }
-    input[type="number"], input[type="text"] {
+    select, input[type="number"], input[type="text"] {
       background: #161b22; border: 1px solid #30363d; color: #c9d1d9;
       padding: .35rem .5rem; border-radius: 6px; font-size: .85rem;
     }
@@ -32,57 +32,67 @@
     table { width: 100%; border-collapse: collapse; font-size: .85rem; }
     th, td { padding: .4rem .6rem; text-align: left; border-bottom: 1px solid #21262d; }
     th { color: #8b949e; font-weight: 600; }
-    .status-ok { color: #3fb950; }
-    .status-error { color: #f85149; }
-    .status-pending { color: #8b949e; }
-    pre { background: #0d1117; padding: .5rem; border-radius: 4px; font-size: .8rem; overflow-x: auto; }
+    .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: .75rem; margin-bottom: 1rem; }
+    .stat-box { background: #0d1117; border: 1px solid #30363d; border-radius: 6px; padding: .75rem; }
+    .stat-box .label { font-size: .75rem; color: #8b949e; text-transform: uppercase; letter-spacing: .04em; }
+    .stat-box .value { font-size: 1.3rem; font-weight: 600; color: #58a6ff; margin-top: .25rem; }
+    .stat-box .value.warn { color: #f85149; }
+    .stat-box .value.ok { color: #3fb950; }
   </style>
 </head>
 <body>
-  <h1>Smoke Test</h1>
+  <h1>Benchmark</h1>
   <div class="nav">
     <a href="/">Dashboard</a>
-    <a href="/benchmark">Benchmark</a>
-    <a href="/metrics">Metrics (JSON)</a>
+    <a href="/smoketest">Smoke Test</a>
     <a href="/health">Health</a>
   </div>
 
   <div class="controls">
-    <button id="btn-run">Run Smoke Test</button>
+    <button id="btn-run">Run Benchmark</button>
     <label>
-      Max models: <input type="number" id="inp-max" value="6" min="1" max="50" style="width:60px">
+      Model:
+      <select id="sel-model" style="width:260px"></select>
+    </label>
+    <label>
+      Iterations: <input type="number" id="inp-iter" value="5" min="1" max="100" style="width:60px">
+    </label>
+    <label>
+      Max tokens: <input type="number" id="inp-tokens" value="256" min="16" max="4096" style="width:70px">
     </label>
     <label>
       <input type="checkbox" id="inp-stream"> Stream
     </label>
     <label>
-      Prompt: <input type="text" id="inp-prompt" value="Say hello in one word." style="width:220px">
+      Prompt: <input type="text" id="inp-prompt" value="Explain quantum computing in three sentences." style="width:320px">
     </label>
   </div>
 
   <div id="status">Ready</div>
 
+  <div class="card" id="summary-card" style="display:none">
+    <div class="stat-grid" id="stat-grid"></div>
+  </div>
+
   <div class="card">
     <table id="results-table">
       <thead>
         <tr>
-          <th>Model</th>
-          <th>Backend</th>
-          <th>Status</th>
+          <th>#</th>
           <th>Latency</th>
+          <th>TTFT</th>
           <th>In Tokens</th>
           <th>Out Tokens</th>
           <th>Tokens/s</th>
-          <th>Preview</th>
           <th>Error</th>
         </tr>
       </thead>
       <tbody id="results-body">
-        <tr><td colspan="9">No test run yet. Click "Run Smoke Test".</td></tr>
+        <tr><td colspan="7">No benchmark run yet. Select a model and click "Run Benchmark".</td></tr>
       </tbody>
     </table>
   </div>
 
-  <script src="/smoketest.js"></script>
+  <script src="/benchmark.js"></script>
 </body>
 </html>

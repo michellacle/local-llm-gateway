@@ -306,6 +306,8 @@ class SmokeTestRunner:
         resp = await client.send(req, stream=True)
         resp.raise_for_status()
         collected: list[str] = []
+        stream_input_tokens: int | None = None
+        stream_output_tokens: int | None = None
         buffer = ""
         async for chunk in resp.aiter_bytes():
             buffer += chunk.decode("utf-8", errors="replace")
@@ -321,6 +323,10 @@ class SmokeTestRunner:
                     content = obj.get("choices", [{}])[0].get("delta", {}).get("content", "")
                     if content:
                         collected.append(content)
+                    usage_node = obj.get("usage")
+                    if usage_node:
+                        stream_input_tokens = usage_node.get("prompt_tokens")
+                        stream_output_tokens = usage_node.get("completion_tokens")
                 except (json.JSONDecodeError, IndexError, KeyError):
                     pass
         await resp.aclose()
@@ -332,6 +338,10 @@ class SmokeTestRunner:
                 if r.model == model_id:
                     r.status = "ok"
                     r.latency_ms = elapsed
+                    r.input_tokens = stream_input_tokens
+                    r.output_tokens = stream_output_tokens
+                    out_tok = r.output_tokens or 0
+                    r.tps = round(out_tok / (elapsed / 1000), 1) if out_tok and elapsed > 0 else None
                     r.response_preview = full_text[:120] if full_text else None
                     break
 
@@ -587,12 +597,11 @@ class BenchmarkRunner:
         in_tok = usage.get("prompt_tokens")
         out_tok = usage.get("completion_tokens")
         tps = round(out_tok / (elapsed / 1000), 1) if out_tok and elapsed > 0 else None
-        async with it._lock if hasattr(it, "_lock") else __import__("asyncio").Lock():
-            it.latency_ms = elapsed
-            it.input_tokens = in_tok
-            it.output_tokens = out_tok
-            it.tps = tps
-            it.ttft_ms = elapsed
+        it.latency_ms = elapsed
+        it.input_tokens = in_tok
+        it.output_tokens = out_tok
+        it.tps = tps
+        it.ttft_ms = elapsed
 
     async def _stream_req(
         self,
