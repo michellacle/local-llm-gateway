@@ -679,9 +679,8 @@ class BenchmarkRunner:
             await resp.aclose()
 
         elapsed = round((time.time() - start) * 1000, 2)
-        ttft = round((first_chunk_time - start) * 1000, 2) if first_chunk_time else 0
-        generation_ms = max(elapsed - ttft, 0)
-        tps = round(it.output_tokens / (generation_ms / 1000), 1) if it.output_tokens and generation_ms > 0 else None
+        tps = round(it.output_tokens / (elapsed / 1000), 1) if it.output_tokens and elapsed > 0 else None
+        ttft = round((first_chunk_time - start) * 1000, 2) if first_chunk_time else elapsed
         it.latency_ms = elapsed
         it.ttft_ms = ttft
         it.tps = tps
