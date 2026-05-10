@@ -292,6 +292,14 @@ class SmokeTestRunner:
                     r.response_preview = content[:120] if content else None
                     break
 
+    def _extract_tokens(self, obj: dict[str, Any]) -> tuple[int | None, int | None]:
+        usage_node = obj.get("usage")
+        if usage_node:
+            return usage_node.get("prompt_tokens"), usage_node.get("completion_tokens")
+        if obj.get("prompt_eval_count") is not None:
+            return obj.get("prompt_eval_count"), obj.get("eval_count")
+        return None, None
+
     async def _do_streaming(
         self,
         client: httpx.AsyncClient,
@@ -631,15 +639,13 @@ class BenchmarkRunner:
                     continue
                 try:
                     obj = json.loads(data)
-                    usage_node = obj.get("usage")
-                    if usage_node:
-                        in_tok = usage_node.get("prompt_tokens")
-                        out_tok = usage_node.get("completion_tokens")
+                    in_t, out_t = self._extract_tokens(obj)
+                    if in_t is not None:
+                        it.input_tokens = in_t
+                    if out_t is not None:
+                        it.output_tokens = out_t
                         total_ms = round((time.time() - start) * 1000, 2)
-                        tps = round(out_tok / (total_ms / 1000), 1) if out_tok and total_ms > 0 else None
-                        it.input_tokens = in_tok
-                        it.output_tokens = out_tok
-                        it.tps = tps
+                        it.tps = round(out_t / (total_ms / 1000), 1) if total_ms > 0 else None
                 except (json.JSONDecodeError, IndexError, KeyError):
                     pass
         await resp.aclose()
