@@ -547,6 +547,8 @@ class BenchmarkRunner:
             "max_tokens": max_tokens,
             "stream": stream,
         }
+        if stream:
+            payload["stream_options"] = {"include_usage": True}
         async with httpx.AsyncClient(timeout=120) as client:
             if stream:
                 await self._stream_req(client, url, {}, payload, it, start)
@@ -579,6 +581,8 @@ class BenchmarkRunner:
             "max_tokens": max_tokens,
             "stream": stream,
         }
+        if stream:
+            payload["stream_options"] = {"include_usage": True}
         headers = {}
         if upstream.api_key:
             headers["authorization"] = f"Bearer {upstream.api_key}"
@@ -634,10 +638,28 @@ class BenchmarkRunner:
         resp.raise_for_status()
         buffer = ""
         first_chunk_time: float | None = None
-        async for chunk in resp.aiter_bytes():
-            if first_chunk_time is None:
-                first_chunk_time = time.time()
-            buffer += chunk.decode("utf-8", errors="replace")
+        try:
+            async for chunk in resp.aiter_bytes():
+                if first_chunk_time is None:
+                    first_chunk_time = time.time()
+                buffer += chunk.decode("utf-8", errors="replace")
+                while "\n" in buffer:
+                    line, buffer = buffer.split("\n", 1)
+                    if not line.startswith("data: "):
+                        continue
+                    data = line[6:]
+                    if data == "[DONE]":
+                        continue
+                    try:
+                        obj = json.loads(data)
+                        in_t, out_t = self._extract_tokens(obj)
+                        if in_t is not None:
+                            it.input_tokens = in_t
+                        if out_t is not None:
+                            it.output_tokens = out_t
+                    except (json.JSONDecodeError, IndexError, KeyError):
+                        pass
+        finally:
             while "\n" in buffer:
                 line, buffer = buffer.split("\n", 1)
                 if not line.startswith("data: "):
@@ -652,12 +674,13 @@ class BenchmarkRunner:
                         it.input_tokens = in_t
                     if out_t is not None:
                         it.output_tokens = out_t
-                        total_ms = round((time.time() - start) * 1000, 2)
-                        it.tps = round(out_t / (total_ms / 1000), 1) if total_ms > 0 else None
                 except (json.JSONDecodeError, IndexError, KeyError):
                     pass
-        await resp.aclose()
+            await resp.aclose()
+
         elapsed = round((time.time() - start) * 1000, 2)
+        tps = round(it.output_tokens / (elapsed / 1000), 1) if it.output_tokens and elapsed > 0 else None
         ttft = round((first_chunk_time - start) * 1000, 2) if first_chunk_time else elapsed
         it.latency_ms = elapsed
         it.ttft_ms = ttft
+        it.tps = tps
