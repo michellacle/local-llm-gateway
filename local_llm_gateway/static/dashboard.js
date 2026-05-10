@@ -30,11 +30,109 @@ function formatNum(val) {
   return val.toLocaleString();
 }
 
+/**
+ * @param {number | null | undefined} val
+ * @returns {string}
+ */
+function formatBigNum(val) {
+  if (val == null || val === 0) return "\u2014";
+  if (val >= 1_000_000) return `${(val / 1_000_000).toFixed(1)}M`;
+  if (val >= 1_000) return `${(val / 1_000).toFixed(1)}K`;
+  return String(val);
+}
+
 /** @param {string} msg */
 function setStatus(msg) {
   /** @type {HTMLElement | null} */
   const el = document.getElementById("status");
   if (el) el.textContent = msg;
+}
+
+/**
+ * @param {number | null | undefined} val
+ */
+function renderTokensPerHour(val) {
+  /** @type {HTMLElement | null} */
+  const el = document.getElementById("tokens-per-hour-value");
+  if (!el) return;
+  if (val == null || val === 0) {
+    el.textContent = "\u2014";
+  } else {
+    el.textContent = formatBigNum(Math.round(val));
+  }
+}
+
+/**
+ * @typedef {Object} BucketData
+ * @property {number} time
+ * @property {number} tokens
+ */
+
+/**
+ * @param {BucketData[] | undefined} buckets
+ */
+function renderBucketChart(buckets) {
+  /** @type {HTMLCanvasElement | null} */
+  const canvas = document.getElementById("bucket-chart");
+  if (!canvas) return;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = rect.width * dpr;
+  canvas.height = rect.height * dpr;
+  ctx.scale(dpr, dpr);
+  const W = rect.width;
+  const H = rect.height;
+
+  ctx.clearRect(0, 0, W, H);
+
+  if (!buckets || buckets.length === 0) {
+    ctx.fillStyle = "#8b949e";
+    ctx.font = "13px -apple-system, sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("No data yet", W / 2, H / 2);
+    return;
+  }
+
+  const maxTokens = Math.max(...buckets.map((b) => b.tokens), 1);
+  const padding = { top: 10, right: 10, bottom: 30, left: 50 };
+  const chartW = W - padding.left - padding.right;
+  const chartH = H - padding.top - padding.bottom;
+  const barW = Math.max(2, (chartW / buckets.length) - 4);
+
+  const last12 = buckets.slice(-12);
+
+  ctx.fillStyle = "#8b949e";
+  ctx.font = "10px monospace";
+  ctx.textAlign = "right";
+  ctx.fillText(formatBigNum(maxTokens), padding.left - 4, padding.top + 8);
+  ctx.fillText("0", padding.left - 4, H - padding.bottom + 12);
+
+  for (let i = 0; i < last12.length; i++) {
+    const b = last12[i];
+    const barH = (b.tokens / maxTokens) * chartH;
+    const x = padding.left + ((i / 12) * chartW) + 2;
+    const y = padding.top + chartH - barH;
+
+    ctx.fillStyle = "#3fb950";
+    ctx.fillRect(x, y, barW, barH);
+
+    ctx.fillStyle = "#8b949e";
+    ctx.font = "9px monospace";
+    ctx.textAlign = "center";
+    const ts = new Date(b.time * 1000);
+    const label = ts.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    ctx.fillText(label, x + barW / 2, H - padding.bottom + 14);
+
+    if (b.tokens > 0) {
+      ctx.fillStyle = "#c9d1d9";
+      ctx.font = "9px monospace";
+      ctx.textAlign = "center";
+      ctx.fillText(formatBigNum(b.tokens), x + barW / 2, y - 4);
+    }
+  }
 }
 
 /**
@@ -249,6 +347,8 @@ function fetchData() {
         /** @type {RecentMetric[] | undefined} */
         const recent = /** @type {RecentMetric[]} */ (data.recent_metrics);
 
+        renderTokensPerHour(/** @type {number} */ data.tokens_per_hour);
+        renderBucketChart(/** @type {BucketData[]} */ (data.buckets));
         renderOverall(overall);
         renderPerModel(perModel);
         renderRecent(recent);

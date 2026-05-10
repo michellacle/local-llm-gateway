@@ -55,6 +55,7 @@ class MetricsStore:
     _lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     _records: deque[RequestMetric] = field(default_factory=lambda: deque(maxlen=2000))
     _prune_task: asyncio.Task | None = None
+    start_time: float = field(default_factory=time.time)
 
     def __post_init__(self):
         self._records = deque(self._records, maxlen=self.max_records)
@@ -91,9 +92,10 @@ class MetricsStore:
     async def aggregate(self) -> dict[str, Any]:
         async with self._lock:
             records = list(self._records)
+            start = self.start_time
 
         if not records:
-            return _empty_aggregate()
+            return _empty_aggregate(start)
 
         overall = _compute_stats(records)
         per_model: dict[str, list[RequestMetric]] = {}
@@ -107,14 +109,18 @@ class MetricsStore:
         for model, recs in per_model.items():
             breakdown[model] = _compute_stats(recs)
 
+        tokens_per_hour, buckets = _compute_throughput(records, start)
+
         return {
             "overall": overall,
             "per_model": breakdown,
             "total_records": len(records),
+            "tokens_per_hour": tokens_per_hour,
+            "buckets": buckets,
         }
 
 
-def _empty_aggregate() -> dict[str, Any]:
+def _empty_aggregate(start_time: float = time.time()) -> dict[str, Any]:
     return {
         "overall": {
             "count": 0,
@@ -126,7 +132,36 @@ def _empty_aggregate() -> dict[str, Any]:
         },
         "per_model": {},
         "total_records": 0,
+        "tokens_per_hour": 0,
+        "buckets": [],
     }
+
+
+def _compute_throughput(
+    records: list[RequestMetric], start_time: float
+) -> tuple[float, list[dict[str, Any]]]:
+    now = time.time()
+    uptime_hours = (now - start_time) / 3600
+    if uptime_hours <= 0:
+        uptime_hours = 1 / 3600
+
+    total_output = sum(r.output_tokens or 0 for r in records)
+    tokens_per_hour = round(total_output / uptime_hours, 1)
+
+    bucket_size = 300
+    buckets: dict[int, int] = {}
+    for r in records:
+        ts = r.timestamp
+        bucket_key = int((ts - start_time) // bucket_size)
+        buckets[bucket_key] = buckets.get(bucket_key, 0) + (r.output_tokens or 0)
+
+    sorted_keys = sorted(buckets.keys())
+    result = [
+        {"time": round((k * bucket_size) + start_time, 3), "tokens": buckets[k]}
+        for k in sorted_keys
+    ]
+
+    return tokens_per_hour, result
 
 
 def _compute_stats(records: list[RequestMetric]) -> dict[str, Any]:

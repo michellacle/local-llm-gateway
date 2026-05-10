@@ -30,6 +30,16 @@
   </div>
   <div id="status">Connecting&hellip;</div>
 
+  <div class="card" style="text-align:center;">
+    <div id="tokens-per-hour-value" style="font-size:2.2rem; font-weight:700; color:#3fb950;">—</div>
+    <div style="font-size:.8rem; color:#8b949e; margin-top:.25rem;">tokens / hour (since gateway start)</div>
+  </div>
+
+  <div class="card">
+    <h2>Token Production (5 min buckets)</h2>
+    <canvas id="bucket-chart" style="width:100%; height:180px;"></canvas>
+  </div>
+
   <div class="card">
     <h2>Overall</h2>
     <table id="overall-table"></table>
