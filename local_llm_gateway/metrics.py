@@ -148,7 +148,7 @@ def _compute_throughput(
     total_output = sum(r.output_tokens or 0 for r in records)
     tokens_per_hour = round(total_output / uptime_hours, 1)
 
-    bucket_size = 300
+    bucket_size = 3600
     buckets: dict[int, int] = {}
     for r in records:
         ts = r.timestamp

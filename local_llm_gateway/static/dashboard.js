@@ -100,9 +100,8 @@ function renderBucketChart(buckets) {
   const padding = { top: 10, right: 10, bottom: 30, left: 50 };
   const chartW = W - padding.left - padding.right;
   const chartH = H - padding.top - padding.bottom;
-  const barW = Math.max(2, (chartW / buckets.length) - 4);
 
-  const last12 = buckets.slice(-12);
+  const last24 = buckets.slice(-24);
 
   ctx.fillStyle = "#8b949e";
   ctx.font = "10px monospace";
@@ -110,27 +109,46 @@ function renderBucketChart(buckets) {
   ctx.fillText(formatBigNum(maxTokens), padding.left - 4, padding.top + 8);
   ctx.fillText("0", padding.left - 4, H - padding.bottom + 12);
 
-  for (let i = 0; i < last12.length; i++) {
-    const b = last12[i];
-    const barH = (b.tokens / maxTokens) * chartH;
-    const x = padding.left + ((i / 12) * chartW) + 2;
-    const y = padding.top + chartH - barH;
+  const points = last24.map((b, i) => {
+    const x = last24.length === 1
+      ? padding.left + chartW / 2
+      : padding.left + (i / (last24.length - 1)) * chartW;
+    const y = padding.top + chartH - (b.tokens / maxTokens) * chartH;
+    return { x, y, tokens: b.tokens, time: b.time };
+  });
 
-    ctx.fillStyle = "#3fb950";
-    ctx.fillRect(x, y, barW, barH);
+  ctx.strokeStyle = "#3fb950";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(points[0].x, points[0].y);
+  for (let i = 1; i < points.length; i++) {
+    ctx.lineTo(points[i].x, points[i].y);
+  }
+  ctx.stroke();
+
+  for (let i = 0; i < points.length; i++) {
+    const p = points[i];
+    ctx.fillStyle = "#0d1117";
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = "#3fb950";
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
 
     ctx.fillStyle = "#8b949e";
     ctx.font = "9px monospace";
     ctx.textAlign = "center";
-    const ts = new Date(b.time * 1000);
+    const ts = new Date(p.time * 1000);
     const label = ts.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-    ctx.fillText(label, x + barW / 2, H - padding.bottom + 14);
+    if (last24.length <= 12 || i % 2 === 0) {
+      ctx.fillText(label, p.x, H - padding.bottom + 14);
+    }
 
-    if (b.tokens > 0) {
+    if (p.tokens > 0) {
       ctx.fillStyle = "#c9d1d9";
       ctx.font = "9px monospace";
-      ctx.textAlign = "center";
-      ctx.fillText(formatBigNum(b.tokens), x + barW / 2, y - 4);
+      ctx.fillText(formatBigNum(p.tokens), p.x, p.y - 8);
     }
   }
 }
