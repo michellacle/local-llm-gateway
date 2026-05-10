@@ -57,6 +57,8 @@ include = [
     "/pyproject.toml",
 ]
 
+[tool.hatch.build.targets.wheel.shared-data]
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]

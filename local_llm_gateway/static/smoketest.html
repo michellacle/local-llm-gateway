@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Smoke Test — Local LLM Gateway</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace;
+      background: #0d1117; color: #c9d1d9; padding: 1.5rem; line-height: 1.5;
+    }
+    h1 { font-size: 1.4rem; margin-bottom: .5rem; color: #58a6ff; }
+    .nav { margin-bottom: 1rem; }
+    .nav a { color: #58a6ff; text-decoration: none; margin-right: 1rem; font-size: .85rem; }
+    .nav a:hover { text-decoration: underline; }
+    .controls { margin: 1rem 0; display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; }
+    button {
+      background: #238636; color: #fff; border: none; padding: .5rem 1rem;
+      border-radius: 6px; cursor: pointer; font-size: .85rem;
+    }
+    button:hover { background: #2ea043; }
+    button:disabled { background: #484f58; cursor: not-allowed; }
+    label { font-size: .85rem; color: #8b949e; }
+    input[type="number"], input[type="text"] {
+      background: #161b22; border: 1px solid #30363d; color: #c9d1d9;
+      padding: .35rem .5rem; border-radius: 6px; font-size: .85rem;
+    }
+    input[type="checkbox"] { margin-right: .25rem; }
+    #status { font-size: .85rem; color: #8b949e; margin: .75rem 0; }
+    .card { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem; margin-bottom: 1rem; }
+    table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+    th, td { padding: .4rem .6rem; text-align: left; border-bottom: 1px solid #21262d; }
+    th { color: #8b949e; font-weight: 600; }
+    .status-ok { color: #3fb950; }
+    .status-error { color: #f85149; }
+    .status-pending { color: #8b949e; }
+    pre { background: #0d1117; padding: .5rem; border-radius: 4px; font-size: .8rem; overflow-x: auto; }
+  </style>
+</head>
+<body>
+  <h1>Smoke Test</h1>
+  <div class="nav">
+    <a href="/">Dashboard</a>
+    <a href="/metrics">Metrics (JSON)</a>
+    <a href="/health">Health</a>
+  </div>
+
+  <div class="controls">
+    <button id="btn-run">Run Smoke Test</button>
+    <label>
+      Max models: <input type="number" id="inp-max" value="6" min="1" max="50" style="width:60px">
+    </label>
+    <label>
+      <input type="checkbox" id="inp-stream"> Stream
+    </label>
+    <label>
+      Prompt: <input type="text" id="inp-prompt" value="Say hello in one word." style="width:220px">
+    </label>
+  </div>
+
+  <div id="status">Ready</div>
+
+  <div class="card">
+    <table id="results-table">
+      <thead>
+        <tr>
+          <th>Model</th>
+          <th>Backend</th>
+          <th>Status</th>
+          <th>Latency</th>
+          <th>In Tokens</th>
+          <th>Out Tokens</th>
+          <th>Tokens/s</th>
+          <th>Preview</th>
+          <th>Error</th>
+        </tr>
+      </thead>
+      <tbody id="results-body">
+        <tr><td colspan="9">No test run yet. Click "Run Smoke Test".</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <script src="/smoketest.js"></script>
+</body>
+</html>

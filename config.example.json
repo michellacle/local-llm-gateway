@@ -8,5 +8,11 @@
       "name": "host2-vllm",
       "host": "host2:8000"
     }
-  ]
+  ],
+  "metrics": {
+    "enabled": true,
+    "retention_seconds": 900,
+    "max_records": 2000,
+    "dashboard_bind": "127.0.0.1"
+  }
 }

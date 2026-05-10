@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -20,8 +20,17 @@ class Upstream:
 
 
 @dataclass(frozen=True)
+class MetricsConfig:
+    enabled: bool = True
+    retention_seconds: float = 900
+    max_records: int = 2000
+    dashboard_bind: str = "127.0.0.1"
+
+
+@dataclass(frozen=True)
 class AppConfig:
     upstreams: tuple[Upstream, ...]
+    metrics: MetricsConfig = field(default_factory=MetricsConfig)
 
     @classmethod
     def from_file(cls, path: str | os.PathLike[str]) -> "AppConfig":
@@ -57,7 +66,17 @@ class AppConfig:
                 )
             )
 
-        return cls(upstreams=tuple(upstreams))
+        metrics_raw = raw.get("metrics", {})
+        if not isinstance(metrics_raw, dict):
+            metrics_raw = {}
+        metrics = MetricsConfig(
+            enabled=bool(metrics_raw.get("enabled", True)),
+            retention_seconds=float(metrics_raw.get("retention_seconds", 900)),
+            max_records=int(metrics_raw.get("max_records", 2000)),
+            dashboard_bind=str(metrics_raw.get("dashboard_bind", "127.0.0.1")),
+        )
+
+        return cls(upstreams=tuple(upstreams), metrics=metrics)
 
 
 def build_base_url(item: dict) -> str:

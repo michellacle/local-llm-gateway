@@ -44,11 +44,60 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Enable uvicorn reload for local development.",
     )
+    parser.add_argument(
+        "--smoketest",
+        action="store_true",
+        help="Run smoke test against all discovered models then exit.",
+    )
+    parser.add_argument(
+        "--smoketest-max",
+        type=int,
+        default=10,
+        help="Max models to test in smoke test (default: 10).",
+    )
+    parser.add_argument(
+        "--smoketest-stream",
+        action="store_true",
+        help="Use streaming mode for smoke test requests.",
+    )
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
     config = load_config(args.config)
+
+    if args.smoketest:
+        import asyncio
+        from .smoketest import SmokeTestRunner
+
+        runner = SmokeTestRunner(config)
+
+        async def run():
+            test_id = await runner.start_run(
+                max_models=args.smoketest_max,
+                stream=args.smoketest_stream,
+            )
+            while True:
+                r = await runner.get_run(test_id)
+                if r and not r.is_running:
+                    break
+                await asyncio.sleep(0.5)
+
+            if r:
+                s = r.summary
+                print(f"\nSmoke test {s['test_id']} complete:")
+                print(f"  OK: {s['ok']}  Failed: {s['failed']}  Total: {s['total_models']}")
+                for res in s["results"]:
+                    icon = "✓" if res["status"] == "ok" else "✗"
+                    lat = f"{res['latency_ms']:.0f}ms" if res["latency_ms"] else "—"
+                    preview = f' "{res["response_preview"]}"' if res.get("response_preview") else ""
+                    err = f" [{res['error']}]" if res.get("error") else ""
+                    print(f"  {icon} {res['model']} ({res['backend']}) {lat}{preview}{err}")
+                return s["failed"] == 0
+
+        success = asyncio.run(run())
+        raise SystemExit(0 if success else 1)
+
     app = create_app(config)
     uvicorn.run(app, host=args.host, port=args.port, reload=args.reload)
