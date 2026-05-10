@@ -56,6 +56,7 @@ class MetricsStore:
     _records: deque[RequestMetric] = field(default_factory=lambda: deque(maxlen=2000))
     _prune_task: asyncio.Task | None = None
     start_time: float = field(default_factory=time.time)
+    _total_output_tokens: int = field(default=0)
 
     def __post_init__(self):
         self._records = deque(self._records, maxlen=self.max_records)
@@ -63,6 +64,7 @@ class MetricsStore:
     async def add(self, metric: RequestMetric) -> None:
         async with self._lock:
             self._records.append(metric)
+            self._total_output_tokens += metric.output_tokens or 0
             if self._prune_task is None or self._prune_task.done():
                 self._prune_task = asyncio.create_task(self._prune_loop())
 
@@ -93,6 +95,7 @@ class MetricsStore:
         async with self._lock:
             records = list(self._records)
             start = self.start_time
+            total_output = self._total_output_tokens
 
         if not records:
             return _empty_aggregate(start)
@@ -109,7 +112,7 @@ class MetricsStore:
         for model, recs in per_model.items():
             breakdown[model] = _compute_stats(recs)
 
-        tokens_per_hour, buckets = _compute_throughput(records, start)
+        tokens_per_hour, buckets = _compute_throughput(records, start, total_output)
 
         return {
             "overall": overall,
@@ -138,14 +141,13 @@ def _empty_aggregate(start_time: float = time.time()) -> dict[str, Any]:
 
 
 def _compute_throughput(
-    records: list[RequestMetric], start_time: float
+    records: list[RequestMetric], start_time: float, total_output: int
 ) -> tuple[float, list[dict[str, Any]]]:
     now = time.time()
     uptime_hours = (now - start_time) / 3600
     if uptime_hours <= 0:
         uptime_hours = 1 / 3600
 
-    total_output = sum(r.output_tokens or 0 for r in records)
     tokens_per_hour = round(total_output / uptime_hours, 1)
 
     bucket_size = 3600

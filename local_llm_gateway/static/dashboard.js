@@ -97,7 +97,7 @@ function renderBucketChart(buckets) {
   }
 
   const maxTokens = Math.max(...buckets.map((b) => b.tokens), 1);
-  const padding = { top: 10, right: 10, bottom: 30, left: 50 };
+  const padding = { top: 24, right: 10, bottom: 30, left: 50 };
   const chartW = W - padding.left - padding.right;
   const chartH = H - padding.top - padding.bottom;
 
