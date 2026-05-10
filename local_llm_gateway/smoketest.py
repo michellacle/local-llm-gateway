@@ -589,6 +589,14 @@ class BenchmarkRunner:
             else:
                 await self._json_req(client, url, headers, payload, it, start)
 
+    def _extract_tokens(self, obj: dict[str, Any]) -> tuple[int | None, int | None]:
+        usage_node = obj.get("usage")
+        if usage_node:
+            return usage_node.get("prompt_tokens"), usage_node.get("completion_tokens")
+        if obj.get("prompt_eval_count") is not None:
+            return obj.get("prompt_eval_count"), obj.get("eval_count")
+        return None, None
+
     async def _json_req(
         self,
         client: httpx.AsyncClient,
