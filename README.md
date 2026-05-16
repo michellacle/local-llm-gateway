@@ -32,6 +32,43 @@ When a request uses `host1-qwen3.6:26b`, Local LLM Gateway forwards it to `host1
 - Configurable upstream API keys and request timeouts.
 - Installable as a regular Python package with the `local-llm-gateway` CLI.
 
+## Common Operations
+
+If installed as a system daemon, these are the commands you will use day to day:
+
+**Ubuntu (systemd):**
+
+```bash
+# Restart (e.g. after changing config.json)
+sudo systemctl restart local-llm-gateway
+
+# Check status
+systemctl status local-llm-gateway --no-pager
+
+# Follow live logs
+journalctl -u local-llm-gateway -f
+```
+
+**macOS (launchd):**
+
+```bash
+# Restart (e.g. after changing config.json)
+sudo launchctl kickstart -k system/com.local-llm-gateway
+
+# Check status
+sudo launchctl print system/com.local-llm-gateway
+
+# Follow live logs
+tail -f /var/log/local-llm-gateway.out.log
+```
+
+**Verify it is running:**
+
+```bash
+curl http://127.0.0.1:8090/health
+curl http://127.0.0.1:8090/v1/models
+```
+
 ## Install Manually
 
 Local LLM Gateway is intended to be installed from a source checkout by a human operator or an AI agent. It is not distributed through PyPI.
