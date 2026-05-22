@@ -11,7 +11,7 @@ import uvicorn
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 
-from .config import AppConfig, MetricsConfig, Upstream, load_config
+from .config import AppConfig, MetricsConfig, Upstream, add_upstream_to_config, load_config, remove_upstream_from_config
 from .metrics import MetricsStore, RequestMetric, streaming_proxy_with_metrics
 from .router import UnknownModelError, UpstreamRegistry
 from .smoketest import BenchmarkRunner, SmokeTestRunner
@@ -36,12 +36,13 @@ OPENAI_ENDPOINTS = {
 }
 
 
-def create_app(config: AppConfig | None = None) -> FastAPI:
+def create_app(config: AppConfig | None = None, config_path: str | None = None) -> FastAPI:
     app_config = config or load_config()
     registry = UpstreamRegistry(app_config.upstreams)
     app = FastAPI(title="Local LLM Gateway", version="0.1.0")
     app.state.registry = registry
     app.state.upstreams = app_config.upstreams
+    app.state.config_path = config_path
 
     metrics_store: MetricsStore | None = None
     if app_config.metrics.enabled:
@@ -63,7 +64,7 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
 
     @app.get("/v1/models")
     async def list_models() -> dict[str, Any]:
-        return await discover_models(app_config.upstreams)
+        return await discover_models(app.state.upstreams)
 
     @app.get("/metrics")
     async def get_metrics() -> dict[str, Any]:
@@ -97,6 +98,23 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
         if js_path.exists():
             return FileResponse(str(js_path), media_type="application/javascript")
         return Response(content=";", media_type="application/javascript")
+
+    @app.get("/upstreams.js")
+    async def upstreams_js() -> FileResponse:
+        js_path = static_dir / "upstreams.js"
+        if js_path.exists():
+            return FileResponse(str(js_path), media_type="application/javascript")
+        return Response(content=";", media_type="application/javascript")
+
+    @app.get("/upstreams")
+    async def upstreams_page() -> FileResponse:
+        html_path = static_dir / "upstreams.html"
+        if html_path.exists():
+            return FileResponse(str(html_path), media_type="text/html")
+        return Response(
+            content="<html><body><h1>Upstreams</h1><p>Not available</p></body></html>",
+            media_type="text/html",
+        )
 
     @app.get("/")
     async def dashboard() -> FileResponse:
@@ -191,6 +209,139 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
         if run is None:
             return {"error": "No benchmark run found"}
         return run.summary
+
+    @app.get("/admin/upstreams")
+    async def admin_list_upstreams() -> dict[str, Any]:
+        return {
+            "upstreams": [
+                {
+                    "name": u.name,
+                    "base_url": u.base_url,
+                    "api_key": u.api_key,
+                    "timeout_seconds": u.timeout_seconds,
+                }
+                for u in app.state.upstreams
+            ]
+        }
+
+    @app.post("/admin/upstreams")
+    async def admin_add_upstream(request: Request) -> dict[str, Any]:
+        payload = await request.json()
+        name = str(payload.get("name", "")).strip()
+        if not name:
+            raise HTTPException(status_code=400, detail="'name' is required")
+
+        if name in registry.list_upstreams():
+            raise HTTPException(status_code=409, detail=f"Upstream '{name}' already exists")
+
+        host = payload.get("host")
+        base_url = payload.get("base_url")
+        if not host and not base_url:
+            raise HTTPException(status_code=400, detail="Either 'host' or 'base_url' is required")
+
+        scheme = str(payload.get("scheme", "http")).strip() or "http"
+        api_path = str(payload.get("api_path", "/v1")).strip() or "/v1"
+        if not api_path.startswith("/"):
+            api_path = f"/{api_path}"
+        api_key = payload.get("api_key")
+        timeout_seconds = float(payload.get("timeout_seconds", 600.0))
+
+        computed_base_url: str
+        if base_url:
+            from urllib.parse import urlparse as _urlparse
+
+            parsed = _urlparse(str(base_url))
+            if not parsed.scheme or not parsed.netloc:
+                raise HTTPException(status_code=400, detail="Invalid 'base_url'")
+            computed_base_url = str(base_url).rstrip("/")
+        else:
+            if not api_path.startswith("/"):
+                api_path = f"/{api_path}"
+            computed_base_url = f"{scheme}://{host}{api_path}".rstrip("/")
+
+        new_upstream = Upstream(
+            name=name,
+            base_url=computed_base_url,
+            api_key=api_key,
+            timeout_seconds=timeout_seconds,
+        )
+
+        registry.add_upstream(new_upstream)
+        app.state.upstreams = (*app.state.upstreams, new_upstream)
+
+        cp = app.state.config_path
+        if cp:
+            add_upstream_to_config(
+                cp,
+                name=name,
+                host=host,
+                base_url=base_url,
+                scheme=scheme,
+                api_path=api_path,
+                api_key=api_key,
+                timeout_seconds=timeout_seconds,
+            )
+
+        return {
+            "status": "added",
+            "upstream": {
+                "name": new_upstream.name,
+                "base_url": new_upstream.base_url,
+                "timeout_seconds": new_upstream.timeout_seconds,
+            },
+            "persisted": bool(cp),
+        }
+
+    @app.delete("/admin/upstreams/{upstream_name}")
+    async def admin_delete_upstream(upstream_name: str) -> dict[str, Any]:
+        if upstream_name not in registry.list_upstreams():
+            raise HTTPException(status_code=404, detail=f"Upstream '{upstream_name}' not found")
+
+        if len(registry.list_upstreams()) <= 1:
+            raise HTTPException(status_code=400, detail="Cannot remove the last upstream")
+
+        registry.remove_upstream(upstream_name)
+        app.state.upstreams = tuple(u for u in app.state.upstreams if u.name != upstream_name)
+
+        cp = app.state.config_path
+        if cp:
+            remove_upstream_from_config(cp, upstream_name)
+
+        return {
+            "status": "removed",
+            "upstream": upstream_name,
+            "persisted": bool(cp),
+        }
+
+    @app.post("/admin/reload")
+    async def admin_reload() -> dict[str, Any]:
+        cp = app.state.config_path
+        if not cp:
+            raise HTTPException(status_code=500, detail="No config path set, cannot reload")
+
+        try:
+            new_config = load_config(cp)
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=f"Failed to load config: {exc}") from exc
+
+        registry.reload(new_config.upstreams)
+        app.state.upstreams = new_config.upstreams
+
+        if new_config.metrics.enabled and app.state.metrics_store is None:
+            app.state.metrics_store = MetricsStore(
+                retention_seconds=new_config.metrics.retention_seconds,
+                max_records=new_config.metrics.max_records,
+            )
+        elif not new_config.metrics.enabled:
+            app.state.metrics_store = None
+
+        app.state.smoke_runner = SmokeTestRunner(new_config)
+        app.state.benchmark_runner = BenchmarkRunner(new_config)
+
+        return {
+            "status": "reloaded",
+            "upstreams": registry.list_upstreams(),
+        }
 
     @app.post("/v1/chat/completions", response_model=None)
     async def chat_completions(request: Request) -> StreamingResponse | Response:

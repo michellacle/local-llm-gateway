@@ -9,6 +9,22 @@ class UpstreamRegistry:
         # Prefer the longest prefix so names like "minadioro-ollama" work.
         self._prefixes = sorted(self._upstreams, key=len, reverse=True)
 
+    def add_upstream(self, upstream: Upstream) -> None:
+        if upstream.name in self._upstreams:
+            raise ValueError(f"Duplicate upstream name '{upstream.name}'")
+        self._upstreams[upstream.name] = upstream
+        self._prefixes = sorted(self._upstreams, key=len, reverse=True)
+
+    def remove_upstream(self, name: str) -> None:
+        if name not in self._upstreams:
+            raise KeyError(f"Upstream '{name}' not found")
+        del self._upstreams[name]
+        self._prefixes = sorted(self._upstreams, key=len, reverse=True)
+
+    def reload(self, upstreams: tuple[Upstream, ...]) -> None:
+        self._upstreams = {upstream.name: upstream for upstream in upstreams}
+        self._prefixes = sorted(self._upstreams, key=len, reverse=True)
+
     def list_upstreams(self) -> list[str]:
         return sorted(self._upstreams)
 

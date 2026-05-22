@@ -99,5 +99,5 @@ def main() -> None:
         success = asyncio.run(run())
         raise SystemExit(0 if success else 1)
 
-    app = create_app(config)
+    app = create_app(config, config_path=args.config)
     uvicorn.run(app, host=args.host, port=args.port, reload=args.reload)

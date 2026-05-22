@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import os
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -31,6 +31,24 @@ class MetricsConfig:
 class AppConfig:
     upstreams: tuple[Upstream, ...]
     metrics: MetricsConfig = field(default_factory=MetricsConfig)
+
+    def to_dict(self) -> dict:
+        result: dict = {
+            "upstreams": [
+                {
+                    "name": u.name,
+                    "base_url": u.base_url,
+                    "api_key": u.api_key,
+                    "timeout_seconds": u.timeout_seconds,
+                }
+                for u in self.upstreams
+            ],
+            "metrics": asdict(self.metrics),
+        }
+        return result
+
+    def to_json_file(self, path: str | os.PathLike[str]) -> None:
+        Path(path).write_text(json.dumps(self.to_dict(), indent=2) + "\n")
 
     @classmethod
     def from_file(cls, path: str | os.PathLike[str]) -> "AppConfig":
@@ -107,4 +125,59 @@ def load_config(path: str | os.PathLike[str] | None = None) -> AppConfig:
     config_path = path or os.getenv(
         "LOCAL_LLM_GATEWAY_CONFIG", os.getenv("LLM_MUX_CONFIG", "config.json")
     )
+    return AppConfig.from_file(config_path)
+
+
+def add_upstream_to_config(
+    config_path: str | os.PathLike[str],
+    name: str,
+    host: str | None = None,
+    base_url: str | None = None,
+    scheme: str = "http",
+    api_path: str = "/v1",
+    api_key: str | None = None,
+    timeout_seconds: float = 600.0,
+) -> AppConfig:
+    """Add an upstream to the config file and return the updated AppConfig."""
+    raw = json.loads(Path(config_path).read_text())
+
+    existing_names = {u.get("name") for u in raw.get("upstreams", [])}
+    if name in existing_names:
+        raise ValueError(f"Duplicate upstream name '{name}'")
+
+    upstream_dict: dict = {"name": name}
+    if base_url:
+        upstream_dict["base_url"] = base_url
+    elif host:
+        upstream_dict["host"] = host
+        upstream_dict["scheme"] = scheme
+        upstream_dict["api_path"] = api_path
+    else:
+        raise ValueError("Must provide either 'host' or 'base_url'")
+
+    if api_key is not None:
+        upstream_dict["api_key"] = api_key
+    if timeout_seconds != 600.0:
+        upstream_dict["timeout_seconds"] = timeout_seconds
+
+    raw["upstreams"].append(upstream_dict)
+    Path(config_path).write_text(json.dumps(raw, indent=2) + "\n")
+
+    return AppConfig.from_file(config_path)
+
+
+def remove_upstream_from_config(
+    config_path: str | os.PathLike[str],
+    name: str,
+) -> AppConfig:
+    """Remove an upstream from the config file and return the updated AppConfig."""
+    raw = json.loads(Path(config_path).read_text())
+    upstreams = raw.get("upstreams", [])
+    remaining = [u for u in upstreams if u.get("name") != name]
+    if len(remaining) == len(upstreams):
+        raise KeyError(f"Upstream '{name}' not found")
+    if not remaining:
+        raise ValueError("Cannot remove the last upstream; config must have at least one")
+    raw["upstreams"] = remaining
+    Path(config_path).write_text(json.dumps(raw, indent=2) + "\n")
     return AppConfig.from_file(config_path)

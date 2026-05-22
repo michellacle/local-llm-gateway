@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Upstreams — Local LLM Gateway</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace;
+      background: #0d1117; color: #c9d1d9; padding: 1.5rem; line-height: 1.5;
+    }
+    h1 { font-size: 1.4rem; margin-bottom: .5rem; color: #58a6ff; }
+    .nav { margin-bottom: 1rem; }
+    .nav a { color: #58a6ff; text-decoration: none; margin-right: 1rem; font-size: .85rem; }
+    .nav a:hover { text-decoration: underline; }
+    .controls { margin: 1rem 0; display: flex; gap: .5rem; align-items: flex-end; flex-wrap: wrap; }
+    button {
+      background: #238636; color: #fff; border: none; padding: .5rem 1rem;
+      border-radius: 6px; cursor: pointer; font-size: .85rem;
+    }
+    button:hover { background: #2ea043; }
+    button:disabled { background: #484f58; cursor: not-allowed; }
+    button.danger { background: #da3633; }
+    button.danger:hover { background: #f85149; }
+    button.secondary { background: #30363d; }
+    button.secondary:hover { background: #484f58; }
+    label { font-size: .85rem; color: #8b949e; }
+    select, input[type="text"], input[type="number"] {
+      background: #161b22; border: 1px solid #30363d; color: #c9d1d9;
+      padding: .35rem .5rem; border-radius: 6px; font-size: .85rem;
+    }
+    #status { font-size: .85rem; color: #8b949e; margin: .75rem 0; min-height: 1.2em; }
+    .card { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem; margin-bottom: 1rem; }
+    table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+    th, td { padding: .4rem .6rem; text-align: left; border-bottom: 1px solid #21262d; }
+    th { color: #8b949e; font-weight: 600; }
+    .form-group { display: flex; flex-direction: column; gap: .25rem; }
+    .form-group label { font-size: .75rem; }
+    .form-row { display: flex; gap: .75rem; flex-wrap: wrap; align-items: flex-end; }
+    .badge { display: inline-block; font-size: .7rem; padding: .15rem .4rem; border-radius: 12px; background: #30363d; color: #8b949e; }
+  </style>
+</head>
+<body>
+  <h1>Upstreams</h1>
+  <div class="nav">
+    <a href="/">Dashboard</a>
+    <a href="/smoketest">Smoke Test</a>
+    <a href="/benchmark">Benchmark</a>
+    <a href="/health">Health</a>
+  </div>
+
+  <div class="card">
+    <h2 style="font-size:.95rem; color:#8b949e; margin-bottom:.75rem; text-transform:uppercase; letter-spacing:.05em;">Add Upstream</h2>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Name</label>
+        <input type="text" id="inp-name" placeholder="e.g. my-gpu" style="width:140px">
+      </div>
+      <div class="form-group">
+        <label>Host (host:port)</label>
+        <input type="text" id="inp-host" placeholder="e.g. 192.168.1.50:11434" style="width:200px">
+      </div>
+      <div class="form-group">
+        <label>Scheme</label>
+        <select id="inp-scheme" style="width:80px">
+          <option value="http" selected>http</option>
+          <option value="https">https</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>API Path</label>
+        <input type="text" id="inp-api-path" placeholder="/v1" style="width:80px" value="/v1">
+      </div>
+      <div class="form-group">
+        <label>API Key</label>
+        <input type="text" id="inp-api-key" placeholder="optional" style="width:160px">
+      </div>
+      <div class="form-group">
+        <label>Timeout (s)</label>
+        <input type="number" id="inp-timeout" value="600" min="1" max="86400" style="width:80px">
+      </div>
+      <button id="btn-add">Add Upstream</button>
+    </div>
+    <div style="margin-top:.5rem;">
+      <label style="font-size:.75rem; color:#484f58;">Or use a full base_url instead of host:port + scheme + path above.</label>
+      <div style="display:flex; gap:.5rem; align-items:flex-end; margin-top:.35rem;">
+        <div class="form-group">
+          <label>Name</label>
+          <input type="text" id="inp-name-url" placeholder="e.g. my-gpu" style="width:140px">
+        </div>
+        <div class="form-group">
+          <label>Base URL</label>
+          <input type="text" id="inp-base-url" placeholder="http://192.168.1.50:11434/v1" style="width:280px">
+        </div>
+        <div class="form-group">
+          <label>API Key</label>
+          <input type="text" id="inp-api-key-url" placeholder="optional" style="width:160px">
+        </div>
+        <div class="form-group">
+          <label>Timeout (s)</label>
+          <input type="number" id="inp-timeout-url" value="600" min="1" max="86400" style="width:80px">
+        </div>
+        <button id="btn-add-url">Add Upstream</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="status"></div>
+
+  <div class="card">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:.5rem;">
+      <h2 style="font-size:.95rem; color:#8b949e; text-transform:uppercase; letter-spacing:.05em;">Configured Upstreams</h2>
+      <button class="secondary" id="btn-reload">Reload From Disk</button>
+    </div>
+    <table id="upstreams-table">
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Base URL</th>
+          <th>API Key</th>
+          <th>Timeout</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="upstreams-body">
+        <tr><td colspan="5">Loading...</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <script src="/upstreams.js"></script>
+</body>
+</html>
