@@ -43,6 +43,51 @@ function esc(s) {
   return d.innerHTML;
 }
 
+async function testConnection(payload) {
+  try {
+    const btn = document.activeElement;
+    if (btn) { btn.disabled = true; btn.textContent = "Testing…"; }
+    const res = await fetch("/admin/upstreams/test", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (res.ok) {
+      const modelList = data.models.map((m) => esc(m)).join(", ") || "(none)";
+      setStatus(`✓ Connected! Found ${data.models_found} model(s): ${modelList}`, true);
+    } else {
+      setStatus(`✗ Test failed: ${data.detail || res.statusText}`, false);
+    }
+  } catch (e) {
+    setStatus("✗ Test failed: " + e.message, false);
+  } finally {
+    const btn = document.querySelector("#btn-test:not(:disabled), #btn-test-url:not(:disabled)");
+    const allBtns = [document.getElementById("btn-test"), document.getElementById("btn-test-url")];
+    allBtns.forEach((b) => { if (b) { b.disabled = false; b.textContent = "Test"; } });
+  }
+}
+
+document.getElementById("btn-test").addEventListener("click", async () => {
+  const host = document.getElementById("inp-host").value.trim();
+  const scheme = document.getElementById("inp-scheme").value;
+  const apiPath = document.getElementById("inp-api-path").value.trim() || "/v1";
+  const apiKey = document.getElementById("inp-api-key").value.trim() || null;
+
+  if (!host) return setStatus("Host is required", false);
+
+  await testConnection({ host, scheme, api_path: apiPath, api_key: apiKey });
+});
+
+document.getElementById("btn-test-url").addEventListener("click", async () => {
+  const baseUrl = document.getElementById("inp-base-url").value.trim();
+  const apiKey = document.getElementById("inp-api-key-url").value.trim() || null;
+
+  if (!baseUrl) return setStatus("Base URL is required", false);
+
+  await testConnection({ base_url: baseUrl, api_key: apiKey });
+});
+
 document.getElementById("btn-add").addEventListener("click", async () => {
   const name = document.getElementById("inp-name").value.trim();
   const host = document.getElementById("inp-host").value.trim();

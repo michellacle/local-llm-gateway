@@ -313,6 +313,60 @@ def create_app(config: AppConfig | None = None, config_path: str | None = None) 
             "persisted": bool(cp),
         }
 
+    @app.post("/admin/upstreams/test")
+    async def admin_test_upstream(request: Request) -> dict[str, Any]:
+        payload = await request.json()
+        host = payload.get("host")
+        base_url = payload.get("base_url")
+        scheme = str(payload.get("scheme", "http")).strip() or "http"
+        api_path = str(payload.get("api_path", "/v1")).strip() or "/v1"
+        api_key = payload.get("api_key")
+        timeout = float(payload.get("timeout_seconds", 10))
+
+        if base_url:
+            from urllib.parse import urlparse as _urlparse
+
+            parsed = _urlparse(str(base_url))
+            if not parsed.scheme or not parsed.netloc:
+                raise HTTPException(status_code=400, detail="Invalid 'base_url'")
+            url = str(base_url).rstrip("/")
+        elif host:
+            if not api_path.startswith("/"):
+                api_path = f"/{api_path}"
+            url = f"{scheme}://{host}{api_path}".rstrip("/")
+        else:
+            raise HTTPException(status_code=400, detail="Either 'host' or 'base_url' is required")
+
+        headers = {"Content-Type": "application/json"}
+        if api_key:
+            headers["Authorization"] = f"Bearer {api_key}"
+
+        try:
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                resp = await client.get(f"{url}/models", headers=headers)
+                resp.raise_for_status()
+                models = resp.json().get("data", [])
+                return {
+                    "status": "ok",
+                    "url": url,
+                    "models_found": len(models),
+                    "models": [m.get("id", "") for m in models[:20]],
+                }
+        except httpx.ConnectError as exc:
+            raise HTTPException(status_code=502, detail=f"Connection refused: {exc}") from exc
+        except httpx.TimeoutException as exc:
+            raise HTTPException(status_code=504, detail=f"Request timed out: {exc}") from exc
+        except httpx.HTTPStatusError as exc:
+            return {
+                "status": "error",
+                "url": url,
+                "status_code": exc.response.status_code,
+                "detail": f"HTTP {exc.response.status_code}: {exc.response.text[:200]}",
+                "models_found": 0,
+            }
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=f"Request failed: {exc}") from exc
+
     @app.post("/admin/reload")
     async def admin_reload() -> dict[str, Any]:
         cp = app.state.config_path
