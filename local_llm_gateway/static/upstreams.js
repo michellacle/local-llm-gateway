@@ -53,16 +53,18 @@ async function testConnection(payload) {
       body: JSON.stringify(payload),
     });
     const data = await res.json();
-    if (res.ok) {
+
+    if (data.status === "ok") {
       const modelList = data.models.map((m) => esc(m)).join(", ") || "(none)";
       setStatus(`✓ Connected! Found ${data.models_found} model(s): ${modelList}`, true);
+    } else if (data.status === "error") {
+      setStatus(`✗ Upstream returned HTTP ${data.status_code}: ${data.detail}`, false);
     } else {
-      setStatus(`✗ Test failed: ${data.detail || res.statusText}`, false);
+      setStatus(`✗ ${data.detail || "Unknown error"}`, false);
     }
   } catch (e) {
-    setStatus("✗ Test failed: " + e.message, false);
+    setStatus("✗ Could not reach gateway: " + e.message, false);
   } finally {
-    const btn = document.querySelector("#btn-test:not(:disabled), #btn-test-url:not(:disabled)");
     const allBtns = [document.getElementById("btn-test"), document.getElementById("btn-test-url")];
     allBtns.forEach((b) => { if (b) { b.disabled = false; b.textContent = "Test"; } });
   }
