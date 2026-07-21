@@ -598,6 +598,17 @@ def upstream_headers(request: Request, upstream: Upstream) -> dict[str, str]:
         for key, value in request.headers.items()
         if key.lower() not in HOP_BY_HOP_HEADERS
     }
+    # Drop empty/malformed Authorization headers from the incoming request
+    # (e.g. "Bearer " with no token) — they cause httpx LocalProtocolError.
+    auth = headers.get("authorization", "")
+    if auth:
+        stripped = auth.strip()
+        if not stripped:
+            del headers["authorization"]
+        elif stripped.lower().startswith("bearer"):
+            token = stripped[len("Bearer "):].strip() if len(stripped) > 7 else ""
+            if not token:
+                del headers["authorization"]
     if upstream.api_key:
         headers["authorization"] = f"Bearer {upstream.api_key}"
     return headers
