@@ -14,5 +14,11 @@
     "retention_seconds": 900,
     "max_records": 2000,
     "dashboard_bind": "127.0.0.1"
+  },
+  "request_review": {
+    "enabled": true,
+    "retention_seconds": 3600,
+    "max_pinned": 500,
+    "db_path": "request_review.db"
   }
 }

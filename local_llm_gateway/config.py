@@ -28,9 +28,18 @@ class MetricsConfig:
 
 
 @dataclass(frozen=True)
+class RequestReviewConfig:
+    enabled: bool = True
+    retention_seconds: float = 3600
+    max_pinned: int = 500
+    db_path: str = "request_review.db"
+
+
+@dataclass(frozen=True)
 class AppConfig:
     upstreams: tuple[Upstream, ...]
     metrics: MetricsConfig = field(default_factory=MetricsConfig)
+    request_review: RequestReviewConfig = field(default_factory=RequestReviewConfig)
 
     def to_dict(self) -> dict:
         result: dict = {
@@ -44,6 +53,7 @@ class AppConfig:
                 for u in self.upstreams
             ],
             "metrics": asdict(self.metrics),
+            "request_review": asdict(self.request_review),
         }
         return result
 
@@ -94,7 +104,17 @@ class AppConfig:
             dashboard_bind=str(metrics_raw.get("dashboard_bind", "127.0.0.1")),
         )
 
-        return cls(upstreams=tuple(upstreams), metrics=metrics)
+        review_raw = raw.get("request_review", {})
+        if not isinstance(review_raw, dict):
+            review_raw = {}
+        request_review = RequestReviewConfig(
+            enabled=bool(review_raw.get("enabled", True)),
+            retention_seconds=float(review_raw.get("retention_seconds", 3600)),
+            max_pinned=int(review_raw.get("max_pinned", 500)),
+            db_path=str(review_raw.get("db_path", "request_review.db")),
+        )
+
+        return cls(upstreams=tuple(upstreams), metrics=metrics, request_review=request_review)
 
 
 def build_base_url(item: dict) -> str:

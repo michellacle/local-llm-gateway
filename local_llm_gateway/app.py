@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
@@ -11,8 +12,17 @@ import uvicorn
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 
-from .config import AppConfig, MetricsConfig, Upstream, add_upstream_to_config, load_config, remove_upstream_from_config
+from .config import (
+    AppConfig,
+    MetricsConfig,
+    RequestReviewConfig,
+    Upstream,
+    add_upstream_to_config,
+    load_config,
+    remove_upstream_from_config,
+)
 from .metrics import MetricsStore, RequestMetric, streaming_proxy_with_metrics
+from .request_store import RequestStore
 from .router import UnknownModelError, UpstreamRegistry
 from .smoketest import BenchmarkRunner, SmokeTestRunner
 
@@ -39,10 +49,6 @@ OPENAI_ENDPOINTS = {
 def create_app(config: AppConfig | None = None, config_path: str | None = None) -> FastAPI:
     app_config = config or load_config()
     registry = UpstreamRegistry(app_config.upstreams)
-    app = FastAPI(title="Local LLM Gateway", version="0.1.0")
-    app.state.registry = registry
-    app.state.upstreams = app_config.upstreams
-    app.state.config_path = config_path
 
     metrics_store: MetricsStore | None = None
     if app_config.metrics.enabled:
@@ -50,6 +56,33 @@ def create_app(config: AppConfig | None = None, config_path: str | None = None) 
             retention_seconds=app_config.metrics.retention_seconds,
             max_records=app_config.metrics.max_records,
         )
+
+    request_store: RequestStore | None = None
+    if app_config.request_review.enabled:
+        request_store = RequestStore(
+            db_path=app_config.request_review.db_path,
+            retention_seconds=app_config.request_review.retention_seconds,
+            max_pinned=app_config.request_review.max_pinned,
+        )
+
+    @asynccontextmanager
+    async def lifespan(app_ref: FastAPI) -> AsyncIterator[None]:
+        if request_store is not None:
+            await request_store.connect()
+        yield
+        if request_store is not None:
+            await request_store.close()
+
+    app = FastAPI(
+        title="Local LLM Gateway",
+        version="0.1.0",
+        lifespan=lifespan,
+    )
+    app.state.registry = registry
+    app.state.upstreams = app_config.upstreams
+    app.state.config_path = config_path
+
+    if app_config.metrics.enabled:
         app.state.metrics_store = metrics_store
 
     smoke_runner = SmokeTestRunner(app_config)
@@ -57,6 +90,18 @@ def create_app(config: AppConfig | None = None, config_path: str | None = None) 
 
     benchmark_runner = BenchmarkRunner(app_config)
     app.state.benchmark_runner = benchmark_runner
+
+    @asynccontextmanager
+    async def lifespan(app_ref: FastAPI) -> AsyncIterator[None]:
+        if request_store is not None:
+            await request_store.connect()
+        yield
+        if request_store is not None:
+            await request_store.close()
+
+    # Re-create app with lifespan (FastAPI requires this at construction time,
+    # so we patch the router's lifespan instead).
+    app.router.lifespan_context = lifespan
 
     @app.get("/health")
     async def health() -> dict[str, Any]:
@@ -209,6 +254,100 @@ def create_app(config: AppConfig | None = None, config_path: str | None = None) 
         if run is None:
             return {"error": "No benchmark run found"}
         return run.summary
+
+    # --- Request Review Routes ---
+
+    @app.get("/requests.js")
+    async def requests_js() -> FileResponse:
+        js_path = static_dir / "requests.js"
+        if js_path.exists():
+            return FileResponse(str(js_path), media_type="application/javascript")
+        return Response(content=";", media_type="application/javascript")
+
+    @app.get("/requests")
+    async def requests_page() -> FileResponse:
+        html_path = static_dir / "requests.html"
+        if html_path.exists():
+            return FileResponse(str(html_path), media_type="text/html")
+        return Response(
+            content="<html><body><h1>Request Review</h1><p>Not available</p></body></html>",
+            media_type="text/html",
+        )
+
+    @app.get("/api/requests")
+    async def api_list_requests(
+        limit: int = 50,
+        offset: int = 0,
+        pinned_only: bool = False,
+        model: str | None = None,
+    ) -> dict[str, Any]:
+        if request_store is None:
+            return {"error": "Request review is disabled"}
+
+        captures = await request_store.list_captures(
+            limit=limit, offset=offset, pinned_only=pinned_only, model=model
+        )
+        total = await request_store.count_captures(pinned_only=pinned_only)
+
+        return {
+            "captures": [
+                {
+                    "id": c.id,
+                    "timestamp": c.timestamp,
+                    "public_model": c.public_model,
+                    "backend_model": c.backend_model,
+                    "backend_name": c.backend_name,
+                    "prompt": c.prompt,
+                    "response": c.response,
+                    "temperature": c.temperature,
+                    "thinking_effort": c.thinking_effort,
+                    "pinned": c.pinned,
+                }
+                for c in captures
+            ],
+            "total": total,
+            "limit": limit,
+            "offset": offset,
+        }
+
+    @app.post("/api/requests/{capture_id}/pin")
+    async def api_pin_request(capture_id: str) -> dict[str, Any]:
+        if request_store is None:
+            return {"error": "Request review is disabled"}
+
+        success = await request_store.pin(capture_id)
+        if not success:
+            raise HTTPException(
+                status_code=400,
+                detail="Could not pin — max pinned limit reached or capture not found",
+            )
+        return {"status": "pinned", "id": capture_id}
+
+    @app.post("/api/requests/{capture_id}/unpin")
+    async def api_unpin_request(capture_id: str) -> dict[str, Any]:
+        if request_store is None:
+            return {"error": "Request review is disabled"}
+
+        success = await request_store.unpin(capture_id)
+        if not success:
+            raise HTTPException(
+                status_code=400,
+                detail="Could not unpin — capture not found or already unpinned",
+            )
+        return {"status": "unpinned", "id": capture_id}
+
+    @app.delete("/api/requests/{capture_id}")
+    async def api_delete_request(capture_id: str) -> dict[str, Any]:
+        if request_store is None:
+            return {"error": "Request review is disabled"}
+
+        success = await request_store.delete(capture_id)
+        if not success:
+            raise HTTPException(
+                status_code=404,
+                detail="Capture not found",
+            )
+        return {"status": "deleted", "id": capture_id}
 
     @app.get("/admin/upstreams")
     async def admin_list_upstreams() -> dict[str, Any]:
@@ -400,7 +539,11 @@ def create_app(config: AppConfig | None = None, config_path: str | None = None) 
     @app.post("/v1/chat/completions", response_model=None)
     async def chat_completions(request: Request) -> StreamingResponse | Response:
         return await proxy_openai_request(
-            request, registry, OPENAI_ENDPOINTS["chat_completions"], metrics_store
+            request,
+            registry,
+            OPENAI_ENDPOINTS["chat_completions"],
+            metrics_store,
+            request_store=request_store,
         )
 
     @app.post("/v1/completions", response_model=None)
@@ -461,6 +604,7 @@ async def proxy_openai_request(
     registry: UpstreamRegistry,
     upstream_path: str,
     metrics_store: MetricsStore | None = None,
+    request_store: RequestStore | None = None,
 ) -> StreamingResponse | Response:
     import time as _time
 
@@ -491,6 +635,18 @@ async def proxy_openai_request(
     headers = upstream_headers(request, upstream)
     url = f"{upstream.normalized_base_url}{upstream_path}"
     request_start = _time.time()
+
+    # Extract capture fields for chat completions
+    capture_prompt: str | None = None
+    capture_temperature: float | None = None
+    capture_thinking_effort: str | None = None
+    if request_store is not None and upstream_path == OPENAI_ENDPOINTS["chat_completions"]:
+        messages = payload.get("messages")
+        if messages is not None:
+            capture_prompt = json.dumps(messages, ensure_ascii=False)
+        capture_temperature = payload.get("temperature")
+        # thinking_effort can be in extra_body or directly in payload
+        capture_thinking_effort = payload.get("thinking_effort")
 
     if bool(payload.get("stream")):
         if metrics_store is not None:
@@ -526,6 +682,28 @@ async def proxy_openai_request(
                     )
                 )
             return upstream_unavailable(exc, upstream)
+
+    # Capture response content for request review
+    if request_store is not None and capture_prompt is not None:
+        resp_body = response.content
+        try:
+            resp_json = json.loads(resp_body) if resp_body else {}
+            choices = resp_json.get("choices", [])
+            response_text = json.dumps(
+                [c.get("message", {}).get("content", "") for c in choices],
+                ensure_ascii=False,
+            )
+            await request_store.add(
+                public_model=model,
+                backend_model=upstream_model,
+                backend_name=upstream.name,
+                prompt=capture_prompt,
+                response=response_text,
+                temperature=capture_temperature,
+                thinking_effort=capture_thinking_effort,
+            )
+        except Exception:
+            pass  # Don't let capture failures affect the response
 
     if metrics_store is not None:
         elapsed = _time.time() - request_start
