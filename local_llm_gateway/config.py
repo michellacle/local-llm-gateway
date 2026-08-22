@@ -107,11 +107,20 @@ class AppConfig:
         review_raw = raw.get("request_review", {})
         if not isinstance(review_raw, dict):
             review_raw = {}
+
+        # Resolve db_path relative to the config file directory (not CWD),
+        # so it lands in /etc/local-llm-gateway/ which is writable under
+        # systemd's ProtectSystem=full sandbox.
+        db_path_raw = review_raw.get("db_path", "request_review.db")
+        db_path = str(db_path_raw)
+        if not os.path.isabs(db_path):
+            db_path = str(config_path.resolve().parent / db_path)
+
         request_review = RequestReviewConfig(
             enabled=bool(review_raw.get("enabled", True)),
             retention_seconds=float(review_raw.get("retention_seconds", 3600)),
             max_pinned=int(review_raw.get("max_pinned", 500)),
-            db_path=str(review_raw.get("db_path", "request_review.db")),
+            db_path=db_path,
         )
 
         return cls(upstreams=tuple(upstreams), metrics=metrics, request_review=request_review)

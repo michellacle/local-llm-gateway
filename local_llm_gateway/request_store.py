@@ -40,36 +40,61 @@ class RequestStore:
         self._db: aiosqlite.Connection | None = None
         self._prune_task: asyncio.Task | None = None
 
+    @property
+    def is_connected(self) -> bool:
+        """Return True if the database connection is available."""
+        return self._db is not None
+
     async def connect(self) -> None:
-        """Initialize the database connection and schema."""
-        self._db = await aiosqlite.connect(self.db_path)
-        self._db.row_factory = aiosqlite.Row
-        await self._db.execute("""
-            CREATE TABLE IF NOT EXISTS captures (
-                id TEXT PRIMARY KEY,
-                timestamp REAL NOT NULL,
-                public_model TEXT NOT NULL,
-                backend_model TEXT NOT NULL,
-                backend_name TEXT NOT NULL,
-                prompt TEXT NOT NULL,
-                response TEXT NOT NULL,
-                temperature REAL,
-                thinking_effort TEXT,
-                pinned INTEGER NOT NULL DEFAULT 0
+        """Initialize the database connection and schema.
+
+        Gracefully degrades if the database cannot be created
+        (e.g., read-only filesystem under systemd sandbox).
+        """
+        try:
+            self._db = await aiosqlite.connect(self.db_path)
+            self._db.row_factory = aiosqlite.Row
+            await self._db.execute("""
+                CREATE TABLE IF NOT EXISTS captures (
+                    id TEXT PRIMARY KEY,
+                    timestamp REAL NOT NULL,
+                    public_model TEXT NOT NULL,
+                    backend_model TEXT NOT NULL,
+                    backend_name TEXT NOT NULL,
+                    prompt TEXT NOT NULL,
+                    response TEXT NOT NULL,
+                    temperature REAL,
+                    thinking_effort TEXT,
+                    pinned INTEGER NOT NULL DEFAULT 0
+                )
+            """)
+            await self._db.execute("""
+                CREATE INDEX IF NOT EXISTS idx_captures_timestamp
+                ON captures(timestamp)
+            """)
+            await self._db.execute("""
+                CREATE INDEX IF NOT EXISTS idx_captures_pinned
+                ON captures(pinned)
+            """)
+            await self._db.commit()
+            # Start background pruning
+            if self._prune_task is None or self._prune_task.done():
+                self._prune_task = asyncio.create_task(self._prune_loop())
+        except (OSError, PermissionError, aiosqlite.OperationalError) as exc:
+            import logging
+
+            logging.getLogger(__name__).warning(
+                "RequestStore: could not open database at %s (%s), "
+                "request review is disabled",
+                self.db_path,
+                exc,
             )
-        """)
-        await self._db.execute("""
-            CREATE INDEX IF NOT EXISTS idx_captures_timestamp
-            ON captures(timestamp)
-        """)
-        await self._db.execute("""
-            CREATE INDEX IF NOT EXISTS idx_captures_pinned
-            ON captures(pinned)
-        """)
-        await self._db.commit()
-        # Start background pruning
-        if self._prune_task is None or self._prune_task.done():
-            self._prune_task = asyncio.create_task(self._prune_loop())
+            if self._db is not None:
+                try:
+                    await self._db.close()
+                except Exception:
+                    pass
+            self._db = None
 
     async def close(self) -> None:
         """Close the database connection and cancel background tasks."""
@@ -92,10 +117,10 @@ class RequestStore:
         response: str,
         temperature: float | None = None,
         thinking_effort: str | None = None,
-    ) -> RequestCapture:
-        """Add a new request capture."""
+    ) -> RequestCapture | None:
+        """Add a new request capture. Returns None if the store is not connected."""
         if self._db is None:
-            raise RuntimeError("RequestStore not connected")
+            return None
 
         capture_id = str(uuid.uuid4())
         timestamp = time.time()

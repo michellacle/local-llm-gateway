@@ -81,6 +81,7 @@ def create_app(config: AppConfig | None = None, config_path: str | None = None) 
     app.state.registry = registry
     app.state.upstreams = app_config.upstreams
     app.state.config_path = config_path
+    app.state.request_store = request_store
 
     if app_config.metrics.enabled:
         app.state.metrics_store = metrics_store
@@ -90,18 +91,6 @@ def create_app(config: AppConfig | None = None, config_path: str | None = None) 
 
     benchmark_runner = BenchmarkRunner(app_config)
     app.state.benchmark_runner = benchmark_runner
-
-    @asynccontextmanager
-    async def lifespan(app_ref: FastAPI) -> AsyncIterator[None]:
-        if request_store is not None:
-            await request_store.connect()
-        yield
-        if request_store is not None:
-            await request_store.close()
-
-    # Re-create app with lifespan (FastAPI requires this at construction time,
-    # so we patch the router's lifespan instead).
-    app.router.lifespan_context = lifespan
 
     @app.get("/health")
     async def health() -> dict[str, Any]:
@@ -281,7 +270,7 @@ def create_app(config: AppConfig | None = None, config_path: str | None = None) 
         pinned_only: bool = False,
         model: str | None = None,
     ) -> dict[str, Any]:
-        if request_store is None:
+        if request_store is None or not request_store.is_connected:
             return {"error": "Request review is disabled"}
 
         captures = await request_store.list_captures(
@@ -312,7 +301,7 @@ def create_app(config: AppConfig | None = None, config_path: str | None = None) 
 
     @app.post("/api/requests/{capture_id}/pin")
     async def api_pin_request(capture_id: str) -> dict[str, Any]:
-        if request_store is None:
+        if request_store is None or not request_store.is_connected:
             return {"error": "Request review is disabled"}
 
         success = await request_store.pin(capture_id)
@@ -325,7 +314,7 @@ def create_app(config: AppConfig | None = None, config_path: str | None = None) 
 
     @app.post("/api/requests/{capture_id}/unpin")
     async def api_unpin_request(capture_id: str) -> dict[str, Any]:
-        if request_store is None:
+        if request_store is None or not request_store.is_connected:
             return {"error": "Request review is disabled"}
 
         success = await request_store.unpin(capture_id)
@@ -338,7 +327,7 @@ def create_app(config: AppConfig | None = None, config_path: str | None = None) 
 
     @app.delete("/api/requests/{capture_id}")
     async def api_delete_request(capture_id: str) -> dict[str, Any]:
-        if request_store is None:
+        if request_store is None or not request_store.is_connected:
             return {"error": "Request review is disabled"}
 
         success = await request_store.delete(capture_id)
